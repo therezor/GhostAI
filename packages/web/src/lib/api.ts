@@ -809,9 +809,7 @@ export const api = {
       ...(signal ? { signal } : {}),
     }),
 
-  // -------------------------------------------------------------------------
   // Workspaces
-  // -------------------------------------------------------------------------
 
   workspaces: (signal?: AbortSignal): Promise<WorkspaceListResponse> =>
     request('/api/workspaces', WorkspaceListResponseSchema, {

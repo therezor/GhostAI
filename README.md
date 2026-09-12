@@ -18,22 +18,24 @@ hardware — Ollama, LM Studio, llama.cpp, vLLM.<br>
 Cloud providers are opt-in, not assumed.
 
 [![licence](https://img.shields.io/github/license/therezor/GhostAI?style=flat-square&color=3fb950&labelColor=0d1117)](LICENSE)
-[![node](https://img.shields.io/badge/node-%E2%89%A522.13-3fb950?style=flat-square&labelColor=0d1117)](docs/getting-started.md)
+[![install](https://img.shields.io/badge/install-one%20binary-3fb950?style=flat-square&labelColor=0d1117)](docs/getting-started.md)
 [![build](https://img.shields.io/github/actions/workflow/status/therezor/GhostAI/ci.yml?style=flat-square&color=3fb950&labelColor=0d1117)](.github/workflows/ci.yml)
 [![telemetry](https://img.shields.io/badge/telemetry-zero-3fb950?style=flat-square&labelColor=0d1117)](packages/web/test/self-contained.test.ts)
 [![runs](https://img.shields.io/badge/runs-offline-3fb950?style=flat-square&labelColor=0d1117)](packages/e2e/test/offline.spec.ts)
-[![npm](https://img.shields.io/npm/v/@ghostwire/ghostai?style=flat-square&color=3fb950&labelColor=0d1117)](https://www.npmjs.com/package/@ghostwire/ghostai)
+[![release](https://img.shields.io/github/v/release/therezor/GhostAI?style=flat-square&color=3fb950&labelColor=0d1117)](https://github.com/therezor/GhostAI/releases/latest)
 
 </div>
 
 ```bash
-npm install -g @ghostwire/ghostai && ghostai serve
+curl -fsSL https://raw.githubusercontent.com/therezor/GhostAI/main/install.sh | sh
+ghostai serve
 ```
 
 <div align="center">
 
 Prints a URL and a one-time code. Open it, pick a model — done.<br>
-Needs Node ≥ 22.13. Nothing else.
+One binary, browser UI compiled in. No runtime, no package manager, nothing to
+install alongside it.
 
 Want a team rather than one agent? `ghostai preset install` picks from a
 [catalogue](https://github.com/therezor/GhostAI-presets) — a researcher, a coder, an
@@ -166,7 +168,7 @@ asks for is an untrusted request.
 | Guard                   | What it stops                                                                                                  |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------- |
 | **Workspace jail**      | Path traversal. `/etc/passwd` addresses `<workspace>/etc/passwd`; paths are rebuilt, then `realpath`'d.        |
-| **Argv-only exec**      | Command injection. `execFile` with `shell: false` — no shell, so no string to interpret.                       |
+| **Argv-only exec**      | Command injection. The argv vector is spawned directly — no shell, so no string to interpret.                  |
 | **Toolboxes**           | Blast radius. A digest-pinned container plus its whole policy, authorised by manifest hash.                    |
 | **Per-tool permission** | An agent doing what you did not enable. Absent means not enabled; `ask` shows you the arguments first.         |
 | **`guardedFetch`**      | SSRF and DNS rebinding. Resolved addresses are pinned into the dispatcher — no second lookup to differ.        |
@@ -221,12 +223,14 @@ one is a folder plus a line.
 git clone https://github.com/therezor/GhostAI.git
 cd GhostAI
 pnpm install
-pnpm build                                  # → packages/cli/dist/index.js
-pnpm --filter @ghostwire/ghostai link --global    # gives you `ghostai`
+pnpm build                                  # the web bundle the binary embeds
+cargo build --release -p ghostai            # → target/release/ghostai
 ```
 
-Needs pnpm 11 (`corepack enable`). `pnpm build` is not optional — without it
-`ghostai serve` says `UI  not built` and runs the API alone.
+Needs pnpm 11 (`corepack enable`) and `rustup`; the compiler version is pinned in
+`rust-toolchain.toml`. `pnpm build` is not optional — `rust-embed` compiles
+`packages/web/dist` into the binary, so a missing bundle is a compile error rather
+than a server that comes up without a UI.
 
 </details>
 

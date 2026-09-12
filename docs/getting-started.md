@@ -8,13 +8,17 @@ Budget about ten minutes, most of which is a model download.
 
 ## 1. What you need
 
-|                         | Why                                                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Node 22.13 or newer** | The floor is exact. `node:sqlite` was unflagged in 22.13, so 22.12 fails at startup rather than degrading. |
-| **A model**             | Either [Ollama](https://ollama.com) running locally, or an API key for a cloud provider.                   |
-| **Docker**              | Optional. Only for [toolboxes](toolboxes.md).                                                              |
+|             | Why                                                                                      |
+| ----------- | ---------------------------------------------------------------------------------------- |
+| **64-bit**  | macOS or Linux, Intel or ARM. There is a build for each of the four.                     |
+| **A model** | Either [Ollama](https://ollama.com) running locally, or an API key for a cloud provider. |
+| **Docker**  | Optional. Only for [toolboxes](toolboxes.md).                                            |
 
-That is the whole list. No database to install, no compiler, no second service.
+That is the whole list. GhostAI is a single binary with the browser UI compiled into
+it: no runtime to install, no database, no compiler, no second service.
+
+On Linux the builds are against glibc 2.35, which is Ubuntu 22.04, Debian 12, RHEL 9 and
+anything newer. An older distribution is the one case that needs a build from source.
 
 For the local route, before you start:
 
@@ -26,30 +30,70 @@ ollama pull qwen3     # a few gigabytes; this is the slow part
 ## 2. Install
 
 ```bash
-npm install -g @ghostwire/ghostai
+curl -fsSL https://raw.githubusercontent.com/therezor/GhostAI/main/install.sh | sh
 ```
 
-That puts `ghostai` on your PATH. There is nothing to compile — `node:sqlite` is built into
-Node — and the browser UI ships inside the package, so there is no second thing to install
-or serve.
+It picks the build for your machine, verifies it against the release's `SHA256SUMS`
+before extracting anything, and puts the binary in `/usr/local/bin` — asking for `sudo`
+only if that directory is not yours, and saying so first. `--dir ~/.local/bin` puts it
+somewhere else, and `--version v1.2.3` installs a particular release rather than the
+latest.
+
+<details>
+<summary>Or download it yourself</summary>
+
+Every [release](https://github.com/therezor/GhostAI/releases/latest) carries four
+tarballs and a `SHA256SUMS` file. Take the one for your machine — `aarch64` or
+`x86_64`, `apple-darwin` or `unknown-linux-gnu` — and put the binary on your PATH:
+
+```bash
+# Substitute your target for the placeholder; `latest` resolves to the current release.
+curl -fsSLO https://github.com/therezor/GhostAI/releases/latest/download/ghostai-<target>.tar.gz
+curl -fsSLO https://github.com/therezor/GhostAI/releases/latest/download/SHA256SUMS
+shasum -a 256 --ignore-missing -c SHA256SUMS     # sha256sum -c on Linux
+
+tar xzf ghostai-<target>.tar.gz
+sudo install ghostai-*/ghostai /usr/local/bin/
+```
+
+Do run the checksum line. It is the one step that distinguishes "the release" from
+"whatever arrived", and it is the reason the script above exists — there, it is not a
+step that can be skipped.
+
+If you downloaded the tarball in a browser rather than with `curl`, macOS attaches a
+quarantine flag and Gatekeeper will refuse the binary. `xattr -d com.apple.quarantine
+ghostai` removes it.
+
+</details>
+
+The asset names carry no version, so the lines above keep working after the next
+release. The directory _inside_ the tarball does carry one, which is what tells you
+later which build you extracted.
+
+That is the whole install. The tarball holds one file, the browser UI is compiled into
+it, and nothing else is fetched at any point — see [Security](security.md).
+
+**Each binary is built on its own architecture** rather than cross-compiled, because
+the credential vault talks to the platform keychain and the container runner signals
+process groups. Windows is not built yet; both of those are POSIX here.
 
 <details>
 <summary>Running from source instead</summary>
 
-For working on GhostAI, or for running a commit that has not been released. Needs pnpm 11
-(`corepack enable`).
+For working on GhostAI, or for running a commit that has not been released. Needs
+pnpm 11 (`corepack enable`) and `rustup`.
 
 ```bash
 git clone https://github.com/therezor/GhostAI.git
 cd GhostAI
 pnpm install
-pnpm build                                  # → packages/cli/dist/index.js
-pnpm --filter @ghostwire/ghostai link --global    # puts `ghostai` on your PATH
+pnpm build                                  # the web bundle the binary embeds
+cargo build --release -p ghostai            # → target/release/ghostai
 ```
 
-`pnpm build` is not optional even if you only want the API: the CLI serves the browser UI
-out of `@ghostwire/web/dist`, and without a build `ghostai serve` says `UI  not built` and
-runs the API alone. See [Development](development.md).
+`pnpm build` is not optional even if you only want the API: `rust-embed` compiles
+`packages/web/dist` into the binary, so a missing bundle fails the build rather than
+producing a server with no UI. See [Development](development.md).
 
 </details>
 
@@ -68,7 +112,6 @@ GhostAI is listening.
   Auth       enabled
   Agent      not configured — add a provider in the UI, or run `ghostai init`
   Workspace  /Users/you/.ghostai/workspace
-  UI         …/node_modules/@ghostwire/web/dist
 
 First run. Open the URL above and enter this one-time code:
 
@@ -79,8 +122,7 @@ First run. Open the URL above and enter this one-time code:
 Press Ctrl-C to stop.
 ```
 
-`Agent  not configured` is expected on a first run — the wizard is about to fix it. If the
-`UI` line says `not built` instead of a path, `pnpm build` did not run.
+`Agent  not configured` is expected on a first run — the wizard is about to fix it.
 
 Open the URL. The wizard asks for a language, that code, a username and password, then a
 provider and a model.
@@ -255,4 +297,6 @@ Not working? Two things account for most of it:
 
 - **The composer says no model is configured.** The provider saved but the model did not,
   or the endpoint is unreachable. Settings → Providers tests the connection.
-- **`ghostai serve` prints `UI  not built`.** Run `pnpm build`.
+- **The browser gets a JSON 404 rather than the app.** That is a binary built without
+  the web bundle — `GHOSTAI_HEADLESS_BUILD=1`, or a source build where `pnpm build`
+  did not run. A release tarball always has it.

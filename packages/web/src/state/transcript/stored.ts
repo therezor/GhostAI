@@ -92,16 +92,35 @@ export function mergeStoredHistory(
 }
 
 /**
- * The one turn where the socket outranks storage, put back whole.
+ * The turns where the socket outranks storage, put back whole.
  *
  * Every other item in the merge takes storage as the base, and that is the right
  * default: a stored row is finished and a live one is whatever this tab has
  * watched, so preferring the live copy in general would trade history for a
- * tail. The exception is a turn the server has just replayed in full — see
- * `TurnItem.authoritative`. There the live copy is the superset: it holds the
- * iteration that has not been written yet, and it holds the nested subagent runs
- * that never enter this session's history at all, since a delegation's steps are
- * rows in the *child's* session.
+ * tail. There are two exceptions, and both are cases where the live copy is the
+ * *superset* rather than the tail.
+ *
+ * The first is a turn the server has just replayed in full — see
+ * `TurnItem.authoritative`. It holds the iteration that has not been written
+ * yet, and it holds the nested subagent runs that never enter this session's
+ * history at all, since a delegation's steps are rows in the *child's* session.
+ *
+ * The second is a fetch that was started before the turn finished and answered
+ * after it. That is not a hypothetical: the socket mints a session key on the
+ * first message, the URL gains it, and the history request that fires on the
+ * change is in flight while the turn is still streaming. Against a server on
+ * the same machine it lands in a millisecond and holds everything; against one
+ * a network away — or a busy one — it lands holding the rows that existed when
+ * it was *asked*, which is a turn missing its last answer. Taking that as the
+ * base deletes text this tab has already displayed, and no later fetch puts it
+ * back: the invalidation that would have refetched fires while this request is
+ * still open and is deduplicated into it. The screen keeps a truncated turn
+ * until something makes it reload.
+ *
+ * So a stored rebuild that knows *less* about a turn than the socket does never
+ * replaces it. Counting parts is the whole test, and it is the right one in
+ * both directions: storage catching up produces at least as many, at which
+ * point it wins and `withLiveRiskBands` restores the detail rows cannot carry.
  *
  * A whole-item replacement rather than a field-by-field merge, and that is the
  * point rather than a shortcut. The card a delegation renders under hangs off a
@@ -120,13 +139,18 @@ function withAuthoritativeTurns(
 ): Transcript {
   const live = new Map<string, TranscriptItem>();
   for (const item of existing) {
-    if (item.kind === 'turn' && item.authoritative) live.set(item.id, item);
+    if (item.kind === 'turn') live.set(item.id, item);
   }
   if (live.size === 0) return base;
 
-  return base.map((item) =>
-    item.kind === 'turn' ? (live.get(item.id) ?? item) : item,
-  );
+  return base.map((item) => {
+    if (item.kind !== 'turn') return item;
+    const watched = live.get(item.id);
+    if (watched?.kind !== 'turn') return item;
+    const outranks =
+      watched.authoritative || watched.parts.length > item.parts.length;
+    return outranks ? watched : item;
+  });
 }
 
 /**

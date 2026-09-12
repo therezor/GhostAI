@@ -24,11 +24,11 @@ and everything else on this page is reference you can reach for afterwards.
 
 ## Understanding it
 
-| Page                            | What it covers                                                                      |
-| ------------------------------- | ----------------------------------------------------------------------------------- |
-| [Architecture](architecture.md) | The package graph, a turn end to end, the event stream, subagents, what is on disk. |
-| [Security](security.md)         | Each guard, the attack it closes, why the obvious approach fails, and its limits.   |
-| [API](api.md)                   | The REST surface and the WebSocket protocol.                                        |
+| Page                            | What it covers                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------------- |
+| [Architecture](architecture.md) | The crate graph, a turn end to end, the event stream, subagents, what is on disk. |
+| [Security](security.md)         | Each guard, the attack it closes, why the obvious approach fails, and its limits. |
+| [API](api.md)                   | The REST surface and the WebSocket protocol.                                      |
 
 ## Working on it
 
@@ -44,6 +44,6 @@ page is a bug. The highest-value files to read directly:
 
 - `packages/protocol/src/config.ts` — the settings tree, with a paragraph per decision
 - `packages/protocol/src/prompt.ts` — the prompt templates and substitution rules
-- `packages/agent/src/loop.ts` — the turn, and the invariants it maintains
-- `packages/agent/src/dispatch.ts` — the tool half of a turn: authorise, run, answer
-- `packages/security/src/` — the guards, each explaining its own threat model
+- `crates/agent/src/agent_loop.rs` — the turn, and the invariants it maintains
+- `crates/agent/src/dispatch.rs` — the tool half of a turn: authorise, run, answer
+- `crates/security/src/` — the guards, each explaining its own threat model

@@ -327,11 +327,15 @@ test('a run leaves a session that is listed like any other', async ({
 test('pages a run history longer than one page', async ({ app, harness }) => {
   const seeded = await seedJob(app, harness.url);
   for (let index = 0; index < 30; index += 1) {
-    const run = harness.server.automation.startRun({ jobId: seeded.id });
-    harness.server.automation.finishRun(run.id, {
-      status: 'ok',
-      output: `run ${String(index)}`,
-    });
+    const started = await app.request.post(
+      `${harness.url}/api/_test/automation/runs`,
+      { data: { jobId: seeded.id } },
+    );
+    const run = (await started.json()) as { id: string };
+    await app.request.post(
+      `${harness.url}/api/_test/automation/runs/${run.id}/finish`,
+      { data: { status: 'ok', output: `run ${String(index)}` } },
+    );
   }
 
   await app.goto(`${harness.url}/automation/${seeded.id}`);

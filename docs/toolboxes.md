@@ -136,7 +136,7 @@ downgraded, because a config that means something other than what it says is wor
 one that fails.
 
 The agent's `allow` list is CIDRs only. A hostname allow-list is defeated by DNS
-rebinding, which is the attack `guardedFetch` already exists to stop; a manifest whose
+rebinding, which is the attack the guarded fetch already exists to stop; a manifest whose
 traffic is all HTTP(S) scopes by hostname through `proxyAllowHosts` instead.
 
 Per-tool `permission` runs the other way: the manifest supplies a _default_ and the agent
@@ -335,7 +335,7 @@ Docker was not running.
 
 ## Why the exec guard relaxes inside one
 
-On the host, `guardExec` refuses shell binaries and refuses path arguments pointing
+On the host, `guard_exec` refuses shell binaries and refuses path arguments pointing
 outside the workspace. Inside a toolbox both restrictions lift — and they lift
 **together**, which is the point.
 

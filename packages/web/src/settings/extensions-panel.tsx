@@ -19,8 +19,9 @@
  *
  * The row's `contributes` is the line to read before the button: it is what the
  * extension declared, and the host drops anything it registers beyond it. It is
- * disclosure rather than a boundary — in-process code can reach `node:fs`
- * regardless — and `docs/security.md` says so rather than implying otherwise.
+ * disclosure rather than a boundary — an extension process reaches the
+ * filesystem regardless — and `docs/security.md` says so rather than implying
+ * otherwise.
  */
 
 import { Blocks, Check, Power, PowerOff, ShieldOff } from 'lucide-react';

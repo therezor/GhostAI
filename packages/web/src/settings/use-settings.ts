@@ -44,9 +44,9 @@ export function useSettings(): UseQueryResult<SettingsResponse> {
  * What has to be reconsidered once a settings write has landed.
  *
  * Exported because `useSaveProvider` writes the tree too, and a second caller
- * with its own list would be a second list to keep in step — which is the shape
- * of the bug this used to be: every screen grew its own invalidation, fired one
- * line after the save, racing the request it was meant to follow.
+ * with its own list would be a second list to keep in step — a per-screen
+ * invalidation fired one line after the save races the request it is meant to
+ * follow.
  */
 export function afterSettingsWrite(
   queryClient: QueryClient,

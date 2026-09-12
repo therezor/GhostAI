@@ -210,9 +210,9 @@ export interface SelectFieldOption {
  * one — renders a blank trigger unless something is given to show instead. A
  * blank control reads as broken, which is worse than the setting it describes.
  *
- * `error` mirrors `TextField`'s rather than being passed as a `hint`, which is
- * what the agent editor used to do: a hint is not announced, does not mark the
- * control invalid, and reads as advice at exactly the moment it is a refusal.
+ * `error` mirrors `TextField`'s rather than being passed as a `hint`: a hint is
+ * not announced, does not mark the control invalid, and reads as advice at
+ * exactly the moment it is a refusal.
  */
 export function SelectField({
   label,

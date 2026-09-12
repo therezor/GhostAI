@@ -212,10 +212,10 @@ export function ChatRoute(): JSX.Element {
         // which workspace its files are in. In the session rather than the
         // sidebar, because choosing either is part of asking the question.
         //
-        // Controls, and only controls. Where the session came from used to sit
-        // beside them as a badge, which put the word `web` under almost every
-        // message box and said nothing — the same reason the list does not badge
-        // it either (`sessions-page.tsx`). It reads from the turn details now.
+        // Controls, and only controls. Where the session came from is not badged
+        // beside them: it would put the word `web` under almost every message box
+        // and say nothing — the same reason the list does not badge it either
+        // (`sessions-page.tsx`). It reads from the turn details.
         //
         // The workspace one is second: the agent is the more frequent decision,
         // and the first position is the one the eye lands on.
@@ -241,9 +241,9 @@ export function ChatRoute(): JSX.Element {
             ? {}
             : { effort: agentChoice.match.reasoningEffort }
         }
-        // The line under the box is the budget's now: it is the one thing there
-        // that changes, and it used to share the row with a keyboard hint that
-        // never did. See `composer.tsx`.
+        // The line under the box is the budget's: it is the one thing there that
+        // changes, and a keyboard hint sharing the row never does. See
+        // `composer.tsx`.
         meta={<ContextStrip sessionKey={sessionKey} />}
         busy={busy}
         queueDepth={queueDepth}

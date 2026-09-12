@@ -61,6 +61,7 @@ import {
   USERNAME,
   type Harness,
   type HarnessOptions,
+  type SeedNotification,
 } from '../harness/server.js';
 import { VIEWPORT } from '../viewport.js';
 
@@ -161,9 +162,7 @@ const SEED: HarnessOptions = {
  * are separated instead. Ten milliseconds on a run that takes minutes.
  */
 async function seedNotifications(harness: Harness): Promise<void> {
-  const archive: ReadonlyArray<
-    Parameters<typeof harness.server.notifications.create>[0]
-  > = [
+  const archive: readonly SeedNotification[] = [
     { title: 'Scheduled job finished', body: 'The nightly digest ran.' },
     {
       title: 'A tool call needs approval',
@@ -173,7 +172,19 @@ async function seedNotifications(harness: Harness): Promise<void> {
   ];
 
   for (const notification of archive) {
-    harness.server.notifications.create(notification);
+    const response = await fetch(`${harness.url}/api/_test/notifications`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${harness.token}`,
+      },
+      body: JSON.stringify(notification),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Seeding a notification answered ${String(response.status)}.`,
+      );
+    }
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
@@ -290,11 +301,11 @@ type Cookies = Awaited<ReturnType<BrowserContext['cookies']>>;
  * Signs in once, and hands back the cookie every screen will reuse.
  *
  * One login for the whole run, not one per screen, because the login route is
- * behind `@fastify/rate-limit` at **ten attempts a minute per address** — and
- * that bucket counts successes. Twenty screens logging in individually get ten
- * captures and ten pictures of the sign-in overlay, which is what this used to
- * do. `fixtures.ts` can log in per test because Playwright gives each test its
- * own worker and its own harness; this script has one of each.
+ * rate-limited at **ten attempts a minute per address** — and that bucket
+ * counts successes. Twenty screens logging in individually would get ten
+ * captures and ten pictures of the sign-in overlay. `fixtures.ts` can log in
+ * per test because Playwright gives each test its own worker and its own
+ * harness; this script has one of each.
  */
 async function signIn(browser: Browser, harness: Harness): Promise<Cookies> {
   const context = await browser.newContext();

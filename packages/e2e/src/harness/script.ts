@@ -1,5 +1,5 @@
 /**
- * What the model says, and the one tool that exists only for these tests.
+ * What the model says, keyed by what was said to it.
  *
  * Every spec drives the app by typing a sentence, so the sentences are the API
  * of this file: `stream a long answer` gets prose and a code fence, `list the
@@ -14,74 +14,64 @@
  *    nothing in front of it.
  *  - `exec` is `ask`, so it produces the approval prompt. Both the approve and
  *    the deny path continue into the same second turn.
- *  - `e2e_wait` is the harness's own, and it exists because "Stop aborts
- *    mid-tool" and "a reload rebuilds an in-flight turn" both need a tool that
- *    is reliably still running a moment after it started. Sleeping on a real
- *    binary would make those two assertions depend on `sleep(1)` resolving the
- *    way this machine's coreutils resolve it; waiting on the turn's own signal
- *    depends on nothing.
- */
-
-import { abortedError } from '@ghostwire/core';
-import { defineTool, type AnyTool } from '@ghostwire/tools';
-import { z } from 'zod';
-
-import { toolCall, type Route } from './provider.js';
-
-/**
- * A tool that finishes when it is told to, and not before.
+ *  - `e2e_wait` is the binary's own, compiled in behind the `test-hooks`
+ *    feature and armed by `GHOSTAI_TEST_HOOKS=1`. It exists because "Stop
+ *    aborts mid-tool" and "a reload rebuilds an in-flight turn" both need a
+ *    tool that is reliably still running a moment after it started. Sleeping on
+ *    a real binary would make those two assertions depend on `sleep(1)`
+ *    resolving the way this machine's coreutils resolve it; waiting on the
+ *    turn's own cancellation token depends on nothing.
  *
- * `risk: 'safe'` on purpose: the approval prompt is the subject of its own
- * spec, and a Stop test that had to approve a tool first would be asserting two
- * things and failing for either.
+ * This file is data and only data: the model is a server on a port, so a turn
+ * is what can be put on a wire and nothing else.
  */
-export const waitTool: AnyTool = defineTool({
-  name: 'e2e_wait',
-  description: 'Wait for a while, then report that the wait finished.',
-  schema: z.strictObject({
-    ms: z.coerce
-      .number()
-      .int()
-      .min(0)
-      .describe('How long to wait, in milliseconds.'),
-  }),
-  risk: 'safe',
-  annotations: { title: 'Wait', readOnlyHint: true, destructiveHint: false },
-  async execute(args, context) {
-    const { signal } = context;
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(finish, args.ms);
-      const abort = (): void => {
-        clearTimeout(timer);
-        reject(abortedError('e2e_wait'));
-      };
-      function finish(): void {
-        signal.removeEventListener('abort', abort);
-        resolve();
-      }
-      if (signal.aborted) {
-        abort();
-        return;
-      }
-      signal.addEventListener('abort', abort, { once: true });
-    });
-    return `waited ${args.ms.toString()}ms`;
-  },
-});
 
-/**
- * A turn that produces no events until the turn is aborted.
- *
- * `scriptedProvider` awaits `onStream` before its first event and then checks
- * the request's signal, so a promise that never settles on its own becomes "the
- * model is thinking" for exactly as long as the client leaves it there.
- * `routedProvider` races this against the request's `AbortSignal`, which is why
- * it does not need a timeout of its own.
- */
-const never = (): Promise<void> => new Promise<void>(() => undefined);
+/** One call the model asks for. */
+export interface ToolCall {
+  /** The id the tool result comes back under. */
+  readonly id: string;
+  readonly name: string;
+  /** The arguments, as an object; the wire carries them encoded. */
+  readonly args: Readonly<Record<string, unknown>>;
+}
+
+/** One model turn, as far as the wire is concerned. */
+export interface ScriptedTurn {
+  /** The answer. Streamed in pieces; absent is a turn that only calls a tool. */
+  readonly text?: string;
+  /** The reasoning trace, streamed before the answer. */
+  readonly reasoning?: string;
+  readonly toolCalls?: readonly ToolCall[];
+  /**
+   * Keep the answer open and never finish it.
+   *
+   * The shortest path to "a turn is running" for a spec that only needs the
+   * composer to be showing Stop — and over a socket that is all "the model is
+   * still thinking" can mean. It ends when the client hangs up, which is what
+   * Stop does.
+   */
+  readonly hold?: boolean;
+}
+
+/** One entry of the lookup: a sentence to match, and the turns it produces. */
+export interface Route {
+  /** Matched against the most recent user message. */
+  readonly match: RegExp;
+  /** One entry per model turn in the exchange. The last one repeats. */
+  readonly turns: readonly ScriptedTurn[];
+}
+
+/** A call, spelled out so a route reads as one line. */
+export function toolCall(
+  id: string,
+  name: string,
+  args: Readonly<Record<string, unknown>>,
+): ToolCall {
+  return { id, name, args };
+}
 
 /** The answer whose markdown exercises the block splitter and the highlighter. */
-const LONG_ANSWER: readonly string[] = [
+const LONG_ANSWER = [
   'Here is what I found.\n\n',
   'The workspace holds a single note file. ',
   'Reading it back is one line:\n\n',
@@ -90,7 +80,7 @@ const LONG_ANSWER: readonly string[] = [
   'console.log(note.trim());\n',
   '```\n\n',
   'That is the whole of it.',
-];
+].join('');
 
 /**
  * What the caller asks its subagent for.
@@ -117,9 +107,8 @@ export const ROUTES: readonly Route[] = [
     match: /\bstream\b/i,
     turns: [
       {
-        reasoning: ['Checking the workspace', ' before answering.'],
-        deltas: LONG_ANSWER,
-        usage: { promptTokens: 412, completionTokens: 96, totalTokens: 508 },
+        reasoning: 'Checking the workspace before answering.',
+        text: LONG_ANSWER,
       },
     ],
   },
@@ -128,7 +117,7 @@ export const ROUTES: readonly Route[] = [
     match: /\blist\b/i,
     turns: [
       { toolCalls: [toolCall('call-list', 'list_dir', { path: '.' })] },
-      { deltas: ['The workspace holds ', '`notes.md`.'] },
+      { text: 'The workspace holds `notes.md`.' },
     ],
   },
   {
@@ -142,7 +131,7 @@ export const ROUTES: readonly Route[] = [
           toolCall('call-exec', 'exec', { argv: ['node', '--version'] }),
         ],
       },
-      { deltas: ['That is the runtime version.'] },
+      { text: 'That is the runtime version.' },
     ],
   },
   {
@@ -150,7 +139,7 @@ export const ROUTES: readonly Route[] = [
     match: /\bwait\b/i,
     turns: [
       { toolCalls: [toolCall('call-wait', 'e2e_wait', { ms: 60_000 })] },
-      { deltas: ['The wait finished.'] },
+      { text: 'The wait finished.' },
     ],
   },
   {
@@ -158,9 +147,7 @@ export const ROUTES: readonly Route[] = [
     // shortest path to "a turn is running" for a spec that only needs the
     // composer to be showing Stop.
     match: /\bstall\b/i,
-    turns: [
-      { onStream: never, deltas: ['Unreachable unless the stall ends.'] },
-    ],
+    turns: [{ hold: true }],
   },
   {
     // The caller's half of a delegation. It hands the researcher a task and
@@ -172,7 +159,7 @@ export const ROUTES: readonly Route[] = [
           toolCall('call-sub', 'ask_researcher', { task: SUBAGENT_TASK }),
         ],
       },
-      { deltas: ['The researcher found ', '`notes.md`.'] },
+      { text: 'The researcher found `notes.md`.' },
     ],
   },
   {
@@ -184,7 +171,7 @@ export const ROUTES: readonly Route[] = [
     match: /\bfind\b/i,
     turns: [
       { toolCalls: [toolCall('call-nested', 'list_dir', { path: '.' })] },
-      { deltas: ['There is one file: ', '`notes.md`.'] },
+      { text: 'There is one file: `notes.md`.' },
     ],
   },
   {
@@ -198,7 +185,7 @@ export const ROUTES: readonly Route[] = [
           toolCall('call-held', 'ask_researcher', { task: SUBAGENT_HELD_TASK }),
         ],
       },
-      { deltas: ['The researcher eventually answered.'] },
+      { text: 'The researcher eventually answered.' },
     ],
   },
   {
@@ -211,10 +198,10 @@ export const ROUTES: readonly Route[] = [
     turns: [
       { toolCalls: [toolCall('call-held-list', 'list_dir', { path: '.' })] },
       {
-        deltas: ['I checked the folder.'],
+        text: 'I checked the folder.',
         toolCalls: [toolCall('call-held-wait', 'e2e_wait', { ms: 60_000 })],
       },
-      { deltas: ['Unreachable unless the wait ends.'] },
+      { text: 'Unreachable unless the wait ends.' },
     ],
   },
 ];

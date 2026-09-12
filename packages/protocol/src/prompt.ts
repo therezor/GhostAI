@@ -1,12 +1,11 @@
 /**
  * The system prompt an agent carries, as a template.
  *
- * An agent's `systemPrompt` used to be a paragraph appended below a hardcoded
- * identity block as an `## Instructions` section. It is now the **whole** static
- * prompt: the heading, the workspace rules, the platform note and the
- * guidelines are all text the operator can read and rewrite. An agent that says
- * nothing about itself is not much of an agent, and neither is one whose actual
- * instructions are invisible in the UI that claims to configure it.
+ * An agent's `systemPrompt` is the **whole** static prompt: the heading, the
+ * workspace rules, the platform note and the guidelines are all text the
+ * operator can read and rewrite. An agent that says nothing about itself is not
+ * much of an agent, and neither is one whose actual instructions are invisible
+ * in the UI that claims to configure it.
  *
  * It is stored as a *template* rather than as finished prose because the same
  * agent runs in different workspaces and on different machines. The workspace
@@ -15,7 +14,7 @@
  * holes the renderer fills.
  *
  * This lives in `@ghostwire/protocol` because packages that share nothing else
- * need the identical text: `@ghostwire/agent` renders it and `@ghostwire/web`
+ * need the identical text: `ghostai-agent` renders it and `@ghostwire/web`
  * shows it in the editor. The browser depends on this package and no other, and
  * a second copy of the text in either is a copy that goes stale.
  *
@@ -25,12 +24,12 @@
  * every config at write time would freeze every agent on the wording that
  * happened to ship the day it was created.
  *
- * **There is no longer anything here the operator cannot edit.** The platform
- * note, the toolbox advertisement and the tool-output policy used to be composed
- * in code with no config key; each is now a template beside the three below. The
- * last of those is the interesting one, and the reasoning is the same as it was
- * for the workspace paragraph: `wrapToolOutput` emits the fences whatever the
- * prose says, so the text explains a mechanism rather than being one. Nor does
+ * **There is nothing here the operator cannot edit.** The platform note, the
+ * toolbox advertisement and the tool-output policy are each a template beside
+ * the three below rather than prose composed in code. The last is the
+ * interesting one, and the reasoning is the workspace paragraph's:
+ * `wrapToolOutput` emits the fences whatever the prose says, so the text
+ * explains a mechanism rather than being one. Nor does
  * deleting the workspace paragraph widen the sandbox — the jail and the exec
  * guard are enforced in code and have never read the prompt. Editing any of this
  * changes what the agent *knows*, not what it *can do*.
@@ -66,14 +65,14 @@ export const SECTION_SEPARATOR = '\n\n---\n\n';
  * agent whose job is to talk about the host, say — and removing a placeholder
  * silently changes every stored template that uses it.
  *
- * **`platformPolicy` is deliberately absent, and used to be here.** The command
- * policy is a *section* now, placed beside the toolbox advertisement and the
- * tool-output policy rather than interpolated into this template. A placeholder
- * cannot express "this section does not apply": it renders to a string, and an
- * empty one leaves the blank lines the template wrote around it. A section that
- * does not apply is simply not in the list. It is still the operator's to edit —
- * `DEFAULT_PLATFORM_HOST_TEMPLATE` and its toolbox twin, on the Running commands
- * box in the agent editor — it is just no longer this template's variable.
+ * **`platformPolicy` is deliberately absent.** The command policy is a
+ * *section*, placed beside the toolbox advertisement and the tool-output policy
+ * rather than interpolated into this template. A placeholder cannot express
+ * "this section does not apply": it renders to a string, and an empty one
+ * leaves the blank lines the template wrote around it. A section that does not
+ * apply is simply not in the list. It is still the operator's to edit —
+ * `DEFAULT_PLATFORM_HOST_TEMPLATE` and its toolbox twin, on the Running
+ * commands box in the agent editor — just not as this template's variable.
  *
  * `RAW_PROMPT_PLACEHOLDERS` keeps it, because raw mode places every section
  * itself and has to be able to name this one.
@@ -196,7 +195,7 @@ export type LivePromptValues = Readonly<Record<LivePromptPlaceholder, string>>;
  * **never cached**, so every line is re-sent on every request of every turn, and
  * a tool-using turn is ten requests.
  *
- * That is why the default is one line. It used to be four:
+ * That is why the default is one line, and not four:
  *
  * ```
  * Current time: 2026-07-30T13:05:40.935Z (host time zone: Europe/London)
@@ -205,12 +204,12 @@ export type LivePromptValues = Readonly<Record<LivePromptPlaceholder, string>>;
  * Agent iteration: 1 / 40
  * ```
  *
- * Nothing in the prompt said what the last three meant, and nothing read them.
- * The session key is a UUID the model cannot use and may echo at the user; the
- * channel named a difference no instruction drew a consequence from; the counter
- * is only actionable near the cap, which is what `{{wrapUp}}` is for. The time is
- * the one line that earns its place — a model has no clock, and without it
- * "today" and "latest" are answered from a training cutoff.
+ * Nothing in the prompt would say what the last three mean, and nothing reads
+ * them. The session key is a UUID the model cannot use and may echo at the user;
+ * the channel names a difference no instruction draws a consequence from; the
+ * counter is only actionable near the cap, which is what `{{wrapUp}}` is for.
+ * The time is the one line that earns its place — a model has no clock, and
+ * without it "today" and "latest" are answered from a training cutoff.
  *
  * `{{wrapUp}}` renders empty except in the last few iterations of a turn.
  *
@@ -237,12 +236,13 @@ Tool output delimiter: {{tag}}{{wrapUp}}`;
  * left" — because the alternative is a plural rule in a string an operator is
  * meant to be able to rewrite in their own words.
  *
- * **The blank line before it is the renderer's, not this string's.** It used to
- * open with two newlines, so that `Current time: {{time}}{{wrapUp}}` broke its
- * paragraph correctly and collapsed to nothing when the section did not apply.
- * That is the right output and the wrong place to hold it: in the editor it
- * showed as a box whose first two lines were empty, which reads as a mistake
- * somebody left behind rather than as a separator. `renderWrapUp` adds it.
+ * **The blank line before it is the renderer's, not this string's.** Opening
+ * with two newlines would break the paragraph correctly in
+ * `Current time: {{time}}{{wrapUp}}` and collapse to nothing when the section
+ * does not apply — the right output held in the wrong place, because in the
+ * editor it shows as a box whose first two lines are empty, which reads as a
+ * mistake somebody left behind rather than as a separator. `renderWrapUp` adds
+ * it.
  */
 export const DEFAULT_WRAP_UP_TEMPLATE = `Tool iterations left in this turn: {{iterationsLeft}}. Wrap up — answer with what you have, or say plainly what is still missing.`;
 
@@ -264,13 +264,11 @@ const DELIMITER_PLACEHOLDER: RegExp = /\{\{(?:nonce|tag)\}\}/;
 /**
  * Whether a template spells out the turn's tool-output delimiter.
  *
- * Here rather than beside any one caller because three of them asked the
- * question and two had already answered it differently: `@ghostwire/security`
- * tested a regex against the *effective* template, while `@ghostwire/runtime` and
- * the agent editor each did `.includes('{{tag}}') || .includes('{{nonce}}')` on
- * the raw string and papered over the difference with an `=== '' ? DEFAULT : …`
- * at the call site. Three spellings of one rule, and the placeholders they are
- * looking for are defined in this file — so this is where the rule belongs.
+ * Here rather than beside any one caller because three of them ask the
+ * question — `ghostai-security` against the *effective* template,
+ * `ghostai-runtime` and the agent editor against the raw string — and three
+ * spellings of one rule disagree sooner or later. The placeholders they look
+ * for are defined in this file, so this is where the rule belongs.
  *
  * Deliberately raw: it answers "does this text name the delimiter", nothing
  * more. A caller that means "does the policy this agent will actually run name
@@ -322,10 +320,9 @@ const GUIDELINES = `## Guidelines
 /**
  * What an agent says about itself when nobody has told it to say anything else.
  *
- * This is the text that used to be built by `identity()` in `@ghostwire/agent`,
- * with the five varying values turned into placeholders. It is the seed every
- * customised prompt starts from, so the wording matters more than it did when
- * it was unreachable: an operator's first edit is a diff against this.
+ * The five varying values are placeholders. It is the seed every customised
+ * prompt starts from, so the wording matters: an operator's first edit is a
+ * diff against this.
  *
  * **Nothing here names a tool, and the Workspace section is why the rule is
  * worth stating.** This template is the identity, so it is sent on every turn
@@ -333,9 +330,9 @@ const GUIDELINES = `## Guidelines
  * tools at all. The tool-shaped sections are withdrawn for that turn; this one
  * cannot be, because an agent always has an identity. So it describes the
  * workspace as a place rather than as something the file tools address, and
- * stays true either way. It used to open "To the file tools it is the whole
- * filesystem", which on a tools-off turn was a sentence about equipment the
- * model did not have.
+ * stays true either way. Opening with "To the file tools it is the whole
+ * filesystem" would, on a tools-off turn, be a sentence about equipment the
+ * model does not have.
  */
 export const DEFAULT_SYSTEM_PROMPT_TEMPLATE = `# {{name}}
 
@@ -351,9 +348,7 @@ plain relative form — \`notes/todo.md\`.
 
 ${GUIDELINES}`;
 
-// ---------------------------------------------------------------------------
-// The sections that used to be composed in code
-// ---------------------------------------------------------------------------
+// The sections placed beside the identity template
 
 /*
  * A convention the templates below rely on, stated once.
@@ -511,7 +506,7 @@ tools.{{tools}}{{notes}}`;
 /**
  * The section that makes the tool-output delimiters mean something.
  *
- * Here rather than beside `wrapToolOutput` in `@ghostwire/security` for the same
+ * Here rather than beside `wrap_tool_output` in `ghostai-security` for the same
  * reason the identity template is here: the browser edits it, and the browser
  * depends on this package and no other. Security imports it — the layer graph
  * runs that way and not the other.
@@ -592,11 +587,10 @@ names.{{index}}`;
  * The memory section: an index, and what to do with it.
  *
  * **It advertises files rather than carrying their contents**, which is the
- * whole shape of the feature and the opposite of what this section used to do.
- * A workspace has many memories and needs at most a few per turn, so an index
- * earns its keep the way `DEFAULT_TOOLBOX_TEMPLATE`'s tool list does — where the
- * old single-file memory was inlined whole on every request whether or not a
- * word of it bore on the question.
+ * whole shape of the feature. A workspace has many memories and needs at most a
+ * few per turn, so an index earns its keep the way `DEFAULT_TOOLBOX_TEMPLATE`'s
+ * tool list does — where inlining a memory whole would pay for it on every
+ * request whether or not a word of it bore on the question.
  *
  * Two sentences that are doing work and should survive a rewrite:
  *
@@ -621,9 +615,7 @@ standing beside its correction.
 
 {{index}}`;
 
-// ---------------------------------------------------------------------------
 // Raw mode
-// ---------------------------------------------------------------------------
 
 /**
  * What a `raw` template may ask for: everything, plus the sections the loop

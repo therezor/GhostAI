@@ -10,11 +10,11 @@
  * spend on navigation, what the agent is doing: the socket's state, unread
  * notifications, and the theme control.
  *
- * It used to carry the resolved provider and model too. That is already on
- * screen where it belongs — the welcome card names them before the first
- * message, and the turn inspector names the ones a given answer actually ran
- * on. A header copy of the same pair is a second place to read it and a second
- * place for it to go stale.
+ * Not the resolved provider and model: those are already on screen where they
+ * belong — the welcome card names them before the first message, and the turn
+ * inspector names the ones a given answer actually ran on. A header copy of the
+ * same pair is a second place to read it and a second place for it to go
+ * stale.
  *
  * The WebSocket hangs here, and here specifically: this is the router's root
  * component, so it is the only one that survives every navigation. A socket
@@ -146,10 +146,9 @@ const CONNECTION_LABELS = {
  *
  * The server first, and the page only if it answered. A tab that reloaded
  * itself and came back on the same stale config would look like the button did
- * nothing — and the reason it did nothing (a `config.json` that no longer
- * parses) would have been on screen for the length of a navigation. So a
- * failure keeps the page and says what happened; the operator can fix the file
- * and press again.
+ * nothing — and the reason (a `config.json` that does not parse) would have
+ * been on screen for the length of a navigation. So a failure keeps the page
+ * and says what happened; the operator can fix the file and press again.
  *
  * The page reload is not redundant once the server has rebuilt. Query has a
  * cache, the transcript has a store, and the built assets may be older than the

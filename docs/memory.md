@@ -47,7 +47,7 @@ list beside `read_file` and `exec`, where turning it off looks like denying one 
 rather than switching off the whole capability.
 
 Denying `memory` removes the prompt section as well as the tool — that gating is in
-`runtime.ts`, and it is what makes one switch enough. An agent that cannot write its
+`crates/runtime/src/runtime.rs`, and it is what makes one switch enough. An agent that cannot write its
 memory should not still be paying to be told what it knows.
 
 **`toolsEnabled: false` removes it too**, and that is the broader condition. Off, the
@@ -116,7 +116,7 @@ worse trade.
 **The frontmatter parser is not a YAML parser and must not become one.** It handles one
 level of nesting, flattened to a dotted key: `metadata:` / `  type: user` arrives as
 `fields['metadata.type']`. That is exactly what this format needs and nothing more. See
-the header of `packages/core/src/frontmatter.ts` for the hazard that rule closes.
+the header of `crates/core/src/frontmatter.rs` for the hazard that rule closes.
 
 ### `MEMORY.md` is generated, and nothing reads it back
 
@@ -248,11 +248,11 @@ See [Configuration](configuration.md).
 In the workspace, which is inside the jail, which means `write_file` and `exec` can both
 edit these files.
 
-`packages/core/src/paths.ts` puts an agent's own directory _beside_ the workspace for
-exactly this reason, and says why: the jail root _is_ the workspace, so memory kept inside
-it is writable by the agent, and that turns prompt injection into a way of rewriting the
-agent's own system prompt. **That argument is correct, and the files were put here
-anyway.**
+`crates/core/src/paths.rs` once reserved an agent's own directory _beside_ the workspace
+for exactly this reason: the jail root _is_ the workspace, so memory kept inside it is
+writable by the agent, and that turns prompt injection into a way of rewriting the agent's
+own system prompt. **That argument is correct, the reservation was removed, and the files
+were put here anyway.**
 
 What buys it: memory committed beside the project it describes, visible in a directory
 listing, diffable in review, and correctable with an editor. A memory an operator cannot

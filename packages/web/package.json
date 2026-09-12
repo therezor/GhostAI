@@ -11,22 +11,9 @@
   },
   "homepage": "https://github.com/therezor/GhostAI",
   "bugs": "https://github.com/therezor/GhostAI/issues",
-  "publishConfig": {
-    "access": "public",
-    "exports": {
-      "./package.json": "./package.json"
-    }
-  },
-  "engines": {
-    "node": ">=22.13"
-  },
   "exports": {
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist/**",
-    "!dist/**/*.map"
-  ],
   "scripts": {
     "build": "vite build",
     "dev": "vite",
@@ -77,5 +64,6 @@
     "jsdom": "^30.0.0",
     "tsx": "^4.19.0",
     "vite": "^8.1.0"
-  }
+  },
+  "private": true
 }

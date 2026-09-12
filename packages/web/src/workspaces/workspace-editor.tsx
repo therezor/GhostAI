@@ -3,10 +3,9 @@
  *
  * A route of its own rather than a rename dialog, and the same shape as the
  * agent and provider editors: the list picks, this edits, the back link returns.
- * A dialog with a single box was the right size for the one thing a workspace
- * used to have — its label — and the wrong size for the screen the moment there
- * was anything else worth reading. There is: the folder the files are actually
- * in, how many conversations still point at it, and when it last moved.
+ * A dialog with a single box is the right size for a label and the wrong size
+ * for everything else worth reading here: the folder the files are actually in,
+ * how many conversations still point at it, and when it last moved.
  *
  * **The folder is a field, and changing it moves the tree.** It is the directory
  * name, so a save that includes it is a `rename(2)` plus a repoint of every
@@ -303,13 +302,12 @@ function Editor({
 
           <TextField
             label={t('workspaces.folder')}
-            // The default's folder is stated, not hinted. It used to sit in the
-            // placeholder, which is the wrong slot for a fact: a placeholder is
-            // drawn in the muted tier and means "nothing here yet", so the one
-            // box on the screen whose answer is fixed was also the one that
-            // looked empty. It is a value now, and inert — `/` is the root every
-            // other workspace is a directory inside, so there is no rename of it
-            // that does not mean relocating the whole tree.
+            // The default's folder is stated, not hinted. A placeholder is the
+            // wrong slot for a fact: drawn in the muted tier, it means "nothing
+            // here yet", so the one box on the screen whose answer is fixed
+            // would also be the one that looks empty. A value, and inert — `/`
+            // is the root every other workspace is a directory inside, so there
+            // is no rename of it that does not mean relocating the whole tree.
             value={workspace?.isDefault === true ? WORKSPACE_ROOT_PATH : folder}
             className="workspaces__folder-input"
             spellCheck={false}

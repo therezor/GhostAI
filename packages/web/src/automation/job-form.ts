@@ -7,10 +7,9 @@
  * conversion happens once, on save.
  *
  * **Cron is validated by shape here and by the server for real.** Five
- * non-empty fields is all this checks. Importing `parseCron` from
- * `@ghostwire/core` would agree with the server exactly — and would drag
- * `node:sqlite` into the browser bundle, which `self-contained.test.ts` exists
- * to prevent. The server answers a 422 naming the field, the panel renders it,
+ * non-empty fields is all this checks. `parse_cron` in `ghostai-core` would
+ * agree with the server exactly, and the browser cannot call it. The server
+ * answers a 422 naming the field, the panel renders it,
  * and then shows the server's own `state.nextRunAtMs` as a date — which is
  * better feedback than a validity flag anyway, because it says *when*.
  */
@@ -250,12 +249,12 @@ export function toJobRequest(
 /**
  * A schedule as one line, for the list.
  *
- * Through `t()` and the shared formatter, which it was not: it used to build
- * `Once, at …` and `Every N minutes` as English string literals over a bare
- * `toLocaleString()`. That slipped past `untranslated.test.ts` because the
- * sweep reads `.tsx` and this is a `.ts` — so the one line summarising every
- * job in the list was the only copy in the feature that no locale could change,
- * and the only timestamp that ignored the install's zone.
+ * Through `t()` and the shared formatter. Building `Once, at …` and `Every N
+ * minutes` as English string literals over a bare `toLocaleString()` slips past
+ * `untranslated.test.ts`, because the sweep reads `.tsx` and this is a `.ts` —
+ * which would leave the one line summarising every job in the list as the only
+ * copy in the feature no locale could change, and the only timestamp ignoring
+ * the install's zone.
  *
  * `count` on the interval case rather than a hand-written singular: i18next
  * resolves the plural through `Intl.PluralRules`, so a language with more than

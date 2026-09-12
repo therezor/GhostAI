@@ -59,7 +59,7 @@ read.
 
 That is a deliberate stopping point rather than a subset on the way to something. Nothing
 else in this repository parses YAML, and what a skill's frontmatter holds is three strings.
-See the header of `packages/core/src/frontmatter.ts`.
+See the header of `crates/core/src/frontmatter.rs`.
 
 ### Which agents see a sheet
 
@@ -194,7 +194,7 @@ because there is a real argument for the opposite: a directory _beside_ the work
 would be one prompt injection could not reach, and so could not use to rewrite what an
 agent believes.
 
-`packages/core/src/paths.ts` used to reserve `~/.ghostai/agents/<id>/` for exactly that.
+`crates/core/src/paths.rs` used to reserve `~/.ghostai/agents/<id>/` for exactly that.
 Nothing ever wrote to it. [Memory](memory.md) declined it, skills declined it, and
 per-agent skill scope declined it too — each on the same grounds, and each time because
 both are meant to be read, reviewed and committed beside the project they describe, and
@@ -212,10 +212,11 @@ which skills are now part of.
 
 What follows from the placement, in code:
 
-- **A symlinked skill directory is skipped.** `isDirectory()` is already false for a
-  symlink, so a link pointing out of the workspace is never followed. There is a test
-  asserting it, because it is a property of `Dirent` rather than a line anyone would
-  notice deleting.
+- **A symlinked skill directory is skipped.** The scan asks a directory entry for its own
+  file type rather than asking whether the path is a directory: the first does not follow
+  a symlink and the second does, so a link pointing out of the workspace is never
+  followed. There is a test asserting it, because the difference is one method call that
+  nobody would notice being changed back.
 - **Every body is bounded** before it reaches the prompt, so a 400 MB file dropped into
   `skills/` is 12 KB of prompt and a log line.
 - **Nothing is written.** The loader only reads.

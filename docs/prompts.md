@@ -140,13 +140,12 @@ one is either useless or expensive.
 
 ### Static half — `systemPrompt`
 
-| Placeholder          | Is                                                                       |
-| -------------------- | ------------------------------------------------------------------------ |
-| `{{name}}`           | The agent's label, or `GhostAI`.                                         |
-| `{{workspaceId}}`    | Which workspace the session is bound to.                                 |
-| `{{platformPolicy}}` | A generated section saying where commands run — see below.               |
-| `{{workspaceRoot}}`  | The absolute workspace path. Available, and **unused by the default**.   |
-| `{{runtime}}`        | `<os> <arch>, Node <version>`. Available, and **unused by the default**. |
+| Placeholder         | Is                                                                          |
+| ------------------- | --------------------------------------------------------------------------- |
+| `{{name}}`          | The agent's label, or `GhostAI`.                                            |
+| `{{workspaceId}}`   | Which workspace the session is bound to.                                    |
+| `{{workspaceRoot}}` | The absolute workspace path. Available, and **unused by the default**.      |
+| `{{runtime}}`       | `<os> <arch>, GhostAI <version>`. Available, and **unused by the default**. |
 
 The last two are offered but not used, and it is worth knowing why before putting them
 back:
@@ -162,6 +161,13 @@ back:
 They remain in the vocabulary because a custom prompt may reasonably want them, and
 removing a placeholder would silently change every stored template that uses it.
 
+**`{{platformPolicy}}` is deliberately not on that list**, even though it is a section
+you can edit. The command policy is a _section_ the loop places beside the toolbox
+advertisement and the tool-output policy, and a placeholder cannot express "this section
+does not apply": it renders to a string, and an empty one leaves the blank lines around it
+behind. Raw mode is where you get to place it yourself — see
+[Sending only the system prompt](#sending-only-the-system-prompt).
+
 ### Runtime half — `livePrompt`
 
 | Placeholder                                                | Is                                                                       |
@@ -169,6 +175,7 @@ removing a placeholder would silently change every stored template that uses it.
 | `{{time}}`                                                 | Local reading with weekday and zone, plus the ISO instant.               |
 | `{{wrapUp}}`                                               | The rendered wrap-up sentence — empty except in the last few iterations. |
 | `{{iteration}}`, `{{maxIterations}}`, `{{iterationsLeft}}` | Counters.                                                                |
+| `{{tag}}`                                                  | The tool-output delimiter in force for this turn.                        |
 | `{{channel}}`, `{{sessionKey}}`                            | Available, and **unused by the default**.                                |
 
 `{{iterationsLeft}}` is also the one placeholder `wrapUpPrompt` may use.
@@ -205,15 +212,16 @@ the section templates generalise it rather than adding a second rule. The altern
 pass afterwards collapsing runs of blank lines — silently rewrites an operator's spacing
 to fix a problem the renderer created.
 
-### The default live-state block is one line
+### The default live-state block is two lines
 
 ```
 ## Live state
 
-Current time: {{time}}{{wrapUp}}
+Current time: {{time}}
+Tool output delimiter: {{tag}}{{wrapUp}}
 ```
 
-It used to be four, and the other three were removed on cost grounds. This half is never
+It used to be five, and the other three were removed on cost grounds. This half is never
 cached, so every line is re-sent on every request of every turn:
 
 - **The session key** is a UUID — twenty tokens of random string per request, for an
@@ -222,12 +230,14 @@ cached, so every line is re-sent on every request of every turn:
 - **The iteration counter** is only actionable near the cap. It now prints only in the
   last three iterations, which is what `{{wrapUp}}` is for.
 
-The time is the one line that earns its place: a model has no clock, and without it
-"today" and "latest" are answered from a training cutoff.
+The time is the first line that earns its place: a model has no clock, and without it
+"today" and "latest" are answered from a training cutoff. The delimiter is the second, and
+it earns more than it costs — naming the tag here is what buys the whole two-hundred-token
+tool-output policy a place in the _cached_ half.
 
 ## Typos are visible, not silent
 
-`renderPromptTemplate` never throws — a prompt that fails to build fails every turn on
+`render_prompt_template` never fails — a prompt that fails to build fails every turn on
 that agent, and an operator's typo is not a reason to take the agent offline.
 
 An **unknown placeholder is left verbatim**. `{{workspacRoot}}` renders as itself rather
@@ -264,10 +274,10 @@ it no longer is. The reasoning it used to rest on — that the policy is the
 prompt-injection defence rather than prose — does not survive looking at what the defence
 actually consists of:
 
-- `wrapToolOutput` wraps **every** tool result in `<tool_output_<nonce>>` fences and
+- `wrap_tool_output` wraps **every** tool result in `<tool_output_<nonce>>` fences and
   escapes any forged delimiter inside the content. It does not read this template.
-- The nonce is regenerated per turn from `randomBytes`. It does not read this template
-  either.
+- The nonce is eight bytes regenerated per turn from the injected `RandomSource`. It does
+  not read this template either.
 
 So the policy paragraph is the _explanation_ of a mechanism, not the mechanism. Delete it
 and the envelopes are still there and still unforgeable; what is gone is the model's
@@ -282,10 +292,10 @@ is session-stable and sits in the static half; a template that spells out `{{tag
 the editor warns about.
 
 The same holds one layer down and for the same reason. **Deleting the workspace paragraph
-does not widen the sandbox** — `WorkspaceJail` and `guardExec` are enforced on every call
+does not widen the sandbox** — `WorkspaceJail` and `guard_exec` are enforced on every call
 and have never read a word of the prompt. **Rewriting `exec`'s description does not
 change what `exec` accepts** — the schema it validates against is generated from its own
-Zod object; see [Tools](tools.md#rewriting-what-a-tool-says-about-itself).
+argument type; see [Tools](tools.md#rewriting-what-a-tool-says-about-itself).
 
 Editing any of this changes what the agent _knows_, not what it _can do_.
 
@@ -313,7 +323,7 @@ would otherwise have placed: `{{platformPolicy}}`, `{{toolbox}}`, `{{toolPolicy}
 The section templates still apply — `{{platformPolicy}}` renders from `platformPrompt`,
 `{{toolbox}}` from `toolboxPrompt` — so raw controls the _layout_ rather than discarding
 the wording. `livePrompt` is the one field it ignores, because its entire content is
-`{{time}}{{wrapUp}}` and both are named here directly.
+`{{time}}`, `{{tag}}` and `{{wrapUp}}`, and all three are named here directly.
 
 **What it costs is the cache.** In template mode the static half is a byte-identical
 prefix a provider discounts for the life of the session. One blob rebuilt every iteration
@@ -359,26 +369,28 @@ a second copy to keep in step.
 
 `ContextContributor` is the seam for content the loop knows nothing about:
 
-```ts
-interface ContextContributor {
-  readonly name: string;
-  staticSection?(
-    ctx: StaticPromptContext,
-  ): Promise<string | undefined> | string | undefined;
-  runtimeSection?(ctx: RuntimePromptContext): string | undefined;
+```rust
+trait ContextContributor {
+    fn name(&self) -> &str;
+    fn static_section<'a>(
+        &'a self,
+        context: &'a StaticPromptContext,
+    ) -> BoxFuture<'a, Option<String>>;
+    fn runtime_section(&self, context: &RuntimePromptContext) -> Option<String>;
 }
 ```
 
-The two halves carry different obligations and are not interchangeable. `staticSection` is
-called once per turn, may do I/O, and **must be stable across the session** — a section
-that changes wherever it likes hands back the cache benefit the split was built for.
-`runtimeSection` is called on every iteration and is synchronous, so anything expensive
-there is paid five or ten times per turn.
+The two halves carry different obligations and are not interchangeable, and the signatures
+say so. `static_section` is called once per turn, is async so it **may** do I/O, and must
+be stable across the session — a section that changes wherever it likes hands back the
+cache benefit the split was built for. `runtime_section` is called on every iteration and
+is synchronous, so anything expensive there is paid five or ten times per turn, and an
+`await` is not available to hide it in.
 
 Contributor sections are appended after the built-in ones, in the order given, so the
 cached prefix grows at the end rather than shifting when a contributor is added.
 
-**[Skills](skills.md) arrive this way**: `SkillsContributor.staticSection` reads
+**[Skills](skills.md) arrive this way**: `SkillsContributor::static_section` reads
 `<workspace>/skills/` once per turn and renders the index. It is wired in the composition
 root — the loop composes and caches sections and deliberately knows nothing about where one
 came from.
@@ -389,9 +401,11 @@ a static half. It is placed _after_ skills, because sections are appended in ord
 memory is the one a turn can rewrite — so it sits where a change invalidates the least of
 the cached prefix.
 
-`memoryPrompt` and `skillsPrompt` are therefore the two section templates that do **not**
-travel on `PromptAgent` with the other six: those fill sections the prompt builder writes,
-and these two are contributors'. The composition root hands them to `MemoryContributor`
+`memoryPrompt` and `skillsPrompt` are therefore the two section templates that travel on
+neither of the prompt builder's arguments: `systemPrompt`, `livePrompt` and `wrapUpPrompt`
+arrive on `PromptAgent`, and `toolboxPrompt`, `policyPrompt` and `platformPrompt` on
+`PromptTools`. Those six fill sections the prompt builder writes; these two are
+contributors'. The composition root hands them to `MemoryContributor`
 and `SkillsContributor` directly. In the editor that distinction is invisible, and
 deliberately — an operator editing their prompt does not care which of the two wrote a
 paragraph.

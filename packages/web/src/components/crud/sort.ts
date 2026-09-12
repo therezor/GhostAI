@@ -91,10 +91,10 @@ export function filterRows<T>(
  * which is the whole reason this is a function and not four lines inlined into
  * each screen.
  *
- * It used to take the current order too, and flip when handed the column
- * already in force — because it was what a column *heading* did, and a heading
- * is both the label and the toggle. `ListSort` asks the two questions
- * separately, so choosing a column is only ever choosing a column.
+ * It does not take the current order and flip when handed the column already in
+ * force. That is what a column *heading* does, being both label and toggle;
+ * `ListSort` asks the two questions separately, so choosing a column is only
+ * ever choosing a column.
  */
 export function sortBy<K extends string>(
   key: K,

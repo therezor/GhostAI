@@ -134,12 +134,12 @@ export function formatDateTime(
 /**
  * A token count with thousands separators.
  *
- * Through `Intl.NumberFormat` with the locale passed in — which is the whole fix
- * for what this used to hand-roll. It grouped by regex because
- * `toLocaleString()` on a machine set to `de-DE` renders 8192 as `8.192`, a
- * number that reads as eight in the one panel whose job is a legible budget. The
- * bug was never that grouping is locale-aware; it was that the locale was
- * *implicit*, and so was whatever the machine happened to be set to.
+ * Through `Intl.NumberFormat` with the locale passed in. Grouping by regex is
+ * the tempting alternative, because `toLocaleString()` on a machine set to
+ * `de-DE` renders 8192 as `8.192`, a number that reads as eight in the one
+ * panel whose job is a legible budget. The problem is not that grouping is
+ * locale-aware; it is that the locale would be *implicit*, and so would
+ * whatever the machine happens to be set to.
  */
 export function formatTokens(tokens: number, locale: string): string {
   if (!Number.isFinite(tokens)) return '—';

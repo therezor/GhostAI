@@ -13,9 +13,9 @@
  * furniture for something done once a month, and it pushes the list, which is
  * what the page is for, down.
  *
- * **Deleting is here now, and it asks first.** It used to live only at the
- * bottom of the editor, which meant removing an agent was a navigation away and
- * removing the wrong one was a single unguarded click once you got there.
+ * **Deleting is here, and it asks first.** At the bottom of the editor instead,
+ * removing an agent would be a navigation away and removing the wrong one a
+ * single unguarded click once you got there.
  *
  * Selecting an agent to *use* is not on this page. That is in the composer,
  * where the choice is actually made; this page is for keeping the list.
@@ -82,9 +82,9 @@ const ASCENDING_FIRST: readonly SortKey[] = ['name', 'model', 'status'];
 /**
  * What the Status column says.
  *
- * A word rather than the absence of one. The state used to be an `off` badge
- * beside the name and nothing at all when the agent was on, which reads as "we
- * had nothing to say about this row" rather than as "this one runs".
+ * A word rather than the absence of one. An `off` badge beside the name and
+ * nothing at all when the agent is on reads as "we had nothing to say about
+ * this row" rather than as "this one runs".
  */
 function statusLabel(row: AgentRow): string {
   return row.enabled ? 'Enabled' : 'Disabled';

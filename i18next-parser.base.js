@@ -12,11 +12,20 @@
  * are stale — the same shape as `format:check`, and the reason i18next was
  * chosen over a hand-rolled catalogue.
  *
- * **One config per surface, because the namespace cannot be inferred.** The CLI
- * addresses its bundle through `getFixedT(null, 'cli')`, which is a runtime
- * binding a static parser cannot see: pointed at both trees at once it files
- * every CLI key under `web`. So `defaultNS` is set per invocation and each run
- * is given only its own sources.
+ * **One config per surface, because the namespace cannot be inferred.** The
+ * parser cannot see a runtime `getFixedT(null, ns)` binding, so pointed at two
+ * trees at once it would file every key under one namespace. `defaultNS` is set
+ * per invocation and each run is given only its own sources. Only `web` is
+ * extracted today, and the shape is kept because a second surface would need it
+ * back unchanged.
+ *
+ * **`locales/en/cli.json` is hand-maintained and is not extracted.** There used
+ * to be an `i18next-parser.cli.js` beside this file pointed at `packages/cli`;
+ * the terminal is Rust now, and `crates/i18n` embeds that bundle with
+ * `include_str!`, generates its typed key constants from it in `build.rs` and
+ * asserts in `crates/i18n/tests` that every key resolves. So the file stays
+ * where it is and is edited by hand — `pnpm i18n:check` covers the web half
+ * alone, and the Rust build is what fails on a key the bundle does not carry.
  *
  * `keepRemoved` is on. A key the parser cannot see is not necessarily dead: the
  * tables in `settings/panels.ts` and `chat/notice.tsx` hold keys as *data* and

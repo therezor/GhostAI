@@ -903,7 +903,7 @@ function Editor({
         ? {
             // Only once the write has landed and the cache holds it. Navigating
             // first lands the editor on an id the settings tree does not have
-            // yet, which is the race that used to say "There is no agent called…".
+            // yet — the race that renders "There is no agent called…".
             onSuccess: () => {
               // This browser's remembered choice is the one reference the server
               // cannot reach, and nothing else fixes it: the picker only resets

@@ -229,9 +229,7 @@ function renderTable(token: Tokens.Table): ReactNode {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Inline
-// ---------------------------------------------------------------------------
 
 function renderInline(tokens: readonly Token[]): ReactNode {
   return tokens.map((token, index) => <Inline key={index} token={token} />);

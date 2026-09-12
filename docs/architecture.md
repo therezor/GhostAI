@@ -1,72 +1,92 @@
 # Architecture
 
-One process. It serves the agent, a REST API, a WebSocket and the static UI on a single
-port, and writes to one SQLite file. Nothing in it is heavy enough to justify a
-split-process topology and the reconnect-and-fall-back-to-HTTP client that would need.
+One process, and one binary. It serves the agent, a REST API, a WebSocket and the UI —
+compiled into the executable — on a single port, and writes to one SQLite file. Nothing in
+it is heavy enough to justify a split-process topology and the
+reconnect-and-fall-back-to-HTTP client that would need.
 
-## The packages
+## The crates
 
-Sixteen, plus two examples. Each is a published-shaped workspace package with its own
+Fourteen, plus the four TypeScript packages that stayed. Each crate has its own
 tests and its own coverage bar.
 
-| Package                     | Does                                                                                                                |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `@ghostwire/protocol`       | Zod schemas → types, JSON Schema and OpenAPI. Zero runtime deps but `zod`.                                          |
-| `@ghostwire/core`           | Message types, `SessionStore`, `WorkspaceStore`, `MessageBus`, `Logger`, `Clock`, config loading, history windowing |
-| `@ghostwire/security`       | `WorkspaceJail`, `guardExec`, `guardedFetch`, `CredentialVault`, nonce fencing, toolbox and extension approvals     |
-| `@ghostwire/providers`      | The provider registry, the `openai-chat` wire adapter, SSE parsing, `withResilience`, token counting                |
-| `@ghostwire/tools`          | `defineTool`, `ToolRegistry`, the built-in tools, the local and container runners                                   |
-| `@ghostwire/mcp`            | The MCP client, connection lifecycle and the bridge from a remote tool onto `Tool`                                  |
-| `@ghostwire/agent`          | `AgentLoop`, the approval contract, prompt assembly, steering, subagents                                            |
-| `@ghostwire/extension-host` | Discovery, the approval check, `import()`, `activate`, and what an extension contributed                            |
-| `@ghostwire/runtime`        | The composition root: config → provider, jail, store, registry, one loop per agent                                  |
-| `@ghostwire/channels`       | The `Channel` contract, `ChannelManager`, `TurnProjection` and the Telegram adapter                                 |
-| `@ghostwire/server`         | Fastify: REST, the WebSocket hub, auth, static UI, OpenAPI                                                          |
-| `@ghostwire/web`            | The React SPA                                                                                                       |
-| `@ghostwire/ghostai`        | The `ghostai` binary                                                                                                |
-| `@ghostwire/i18n`           | The i18next instance, locale negotiation, typed keys                                                                |
-| `@ghostwire/tui`            | A domain-free terminal toolkit: key decoding, display-width text, a transient selection region                      |
-| `@ghostwire/e2e`            | Playwright, plus the optional design-fidelity gate                                                                  |
+| Crate                    | Does                                                                                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `ghostai-protocol`       | The wire types as serde + schemars, mirroring the zod schemas. No I/O.                                                 |
+| `ghostai-i18n`           | i18next-compatible lookup over the shipped locale bundles, with typed key constants.                                   |
+| `ghostai-core`           | Message types, `SessionStore`, `WorkspaceStore`, the message bus, logging, `Clock`, config loading, history windowing  |
+| `ghostai-security`       | `WorkspaceJail`, `guard_exec`, the guarded fetch, the credential vault, nonce fencing, toolbox and extension approvals |
+| `ghostai-providers`      | The provider registry, the `openai-chat` wire, SSE parsing, resilience, token counting                                 |
+| `ghostai-tools`          | The `Tool` trait and registry, the built-in tools, the local and container runners                                     |
+| `ghostai-mcp`            | The MCP client, connection lifecycle and the bridge from a remote tool onto `Tool`                                     |
+| `ghostai-agent`          | `AgentLoop`, the approval contract, prompt assembly, steering, subagents                                               |
+| `ghostai-channels`       | The `Channel` contract, `ChannelManager`, `TurnProjection` and the Telegram adapter                                    |
+| `ghostai-extension-host` | Discovery, the approval check, the JSON-RPC subprocess host, and what an extension contributed                         |
+| `ghostai-runtime`        | The composition root: config → provider, jail, store, registry, one loop per agent                                     |
+| `ghostai-server`         | axum: REST, the WebSocket hub, auth, the embedded UI, OpenAPI                                                          |
+| `ghostai-tui`            | A domain-free terminal toolkit: key decoding, display-width text, a transient selection region                         |
+| `ghostai`                | **The binary.** Every command and flag, and the UI compiled into it.                                                   |
+
+| Still TypeScript      | Does                                                 |
+| --------------------- | ---------------------------------------------------- |
+| `@ghostwire/web`      | The React SPA                                        |
+| `@ghostwire/protocol` | Zod schemas → types, JSON Schema and OpenAPI         |
+| `@ghostwire/i18n`     | The i18next instance, locale negotiation, typed keys |
+| `@ghostwire/e2e`      | Playwright, plus the optional design-fidelity gate   |
+
+**`protocol` and `i18n` exist twice on purpose.** The browser is the reason: it
+parses those schemas on every response and every WebSocket frame, and it reads
+those locale bundles at runtime, so the TypeScript copies are not build-time
+artefacts that could be generated and thrown away. They stay the source of
+truth, the Rust crates mirror them, and a per-schema JSON Schema drift gate
+compares the two on every CI run — which is what keeps "mirror" a checkable
+claim rather than an intention.
 
 ### Layering
 
 ```
-{ protocol, i18n } → core → security → { providers, tools } → { mcp, agent } ─┬→ runtime → server ┐
-{ protocol, i18n } → web                                                      │                   │
-             core → channels ────────────────→ extension-host ────────────────┘                   ├→ cli
-                    tui                                                                           ┘
+{ protocol, i18n } → core → security → { providers, tools } → { mcp, agent } ─┬→ runtime ──┐
+                                                                              │            │
+                     core → channels ──────→ extension-host ──────────────────┘            ├→ ghostai
+                                                                                           │  (binary)
+        { protocol, i18n } → web (TypeScript)          agent … → server ───────────────────┘
+                             tui
 ```
 
-`protocol`, `i18n` and `tui` declare no workspace dependency at all. `tui` is a terminal
-toolkit that knows nothing about this application, which is why it sits beside the roots
-rather than under them, and why only `cli` reaches for it.
+`protocol`, `i18n` and `tui` declare no workspace dependency at all. `tui` is a
+terminal toolkit that knows nothing about this application, which is why it sits
+beside the roots rather than under them, and why only the binary reaches for it.
 
-Dependencies only run downward, and the rule is enforced two ways, both mechanical:
+**`server` does not depend on `runtime`.** It takes a `ServerRuntime` trait and
+the binary supplies the implementation, so the transport never names the
+composition root — which is the same rule as "the agent must never reach back
+into the HTTP server", applied one layer up.
 
-1. **pnpm's isolated `node_modules`.** A package can only resolve `@ghostwire/x` if it
-   declares it in `dependencies`. The manifests _are_ the layer graph — an undeclared
-   import fails to resolve, not merely to lint.
-2. **`no-restricted-imports`** bans the deep relative imports (`../../*`) that would
-   sneak across a package boundary.
+Dependencies only run downward, and the rule is mechanical: a crate that does
+not list another in its `[dependencies]` cannot `use` it. That is Cargo doing
+what pnpm's isolated `node_modules` used to do — the manifests _are_ the layer
+graph, and an undeclared import fails to compile rather than merely to lint.
 
-The agent must never reach back into the HTTP server. One consequence is visible in the
-subagent design below: delegation lives in `AgentLoop` rather than in a tool, because
-`@ghostwire/tools` sits underneath it and `ToolContext` has no event sink.
+One consequence is visible in the subagent design below: delegation lives in
+`AgentLoop` rather than in a tool, because `ghostai-tools` sits underneath it
+and a tool's context has no event sink.
 
 ## A turn
 
-`AgentLoop.run(input)` returns an `AsyncGenerator<AgentEvent, TurnResult>`. The caller
-drives it with `for await`, and abandoning the iterator unwinds the turn through the same
-`finally` an abort would. There is no `onToken` callback anywhere.
+`AgentLoop::run(input, &token)` spawns the turn and hands back a `Turn`: a bounded stream
+of `AgentEvent`, a completion carrying the `TurnResult`, and a guard. **Dropping the `Turn`
+cancels the turn's token**, so abandoning the stream unwinds the turn through exactly the
+path an explicit stop takes, and a consumer that stops reading stops the turn rather than
+filling memory behind it. There is no `on_token` callback anywhere.
 
 Per iteration, up to `maxToolIterations` (default 40):
 
 1. **Drain the steering queue.** Anything the operator typed while the turn was running
    is appended as a user message, prefixed so the model can tell it apart from the
    original request. Capped at 16 pending.
-2. **Check the abort signal, then the wall clock.** `loopWallTimeoutMs` is checked at the
-   _top_ of the iteration — a turn should not discover it is out of time halfway through
-   a provider call.
+2. **Check the cancellation token, then the wall clock.** `loopWallTimeoutMs` is checked
+   at the _top_ of the iteration — a turn should not discover it is out of time halfway
+   through a provider call.
 3. **Rebuild the runtime half of the prompt** and assemble the request as
    `[system] + history(sessionKey)`.
 4. **Stream from the provider.** `assistant.delta` and `reasoning.delta` go out as they
@@ -95,8 +115,9 @@ caused a specific failure:
   per iteration would rewrite the cached prompt prefix five or ten times a turn.
 - **`messages[0]` is rewritten, not supplemented.** Two system messages is a shape some
   providers reject and others quietly reorder, and the ordering is what the cache depends on.
-- **One cancellation mechanism.** A single `AbortSignal` threads from the request through
-  the loop, the provider fetch, tool execution and any child process.
+- **One cancellation mechanism.** A single `CancellationToken` threads from the request
+  through the loop, the provider request, tool execution and any child process. A timeout
+  is a `child_token()` of it, not a second mechanism.
 
 ### Events
 
@@ -112,9 +133,9 @@ command looks alive rather than hung.
 
 `context.usage` is the one that is not about the turn. It goes out at the end of each
 iteration, once the tool results are written, and reports what the next request would
-cost — the same numbers `describeContext` gives the REST route and the CLI, measured from
+cost — the same numbers `describe_context` gives the REST route and the CLI, measured from
 the prompt the iteration already composed rather than from a second assembly. The
-measurement runs through `wire-encode.ts`, the module the transport builds its body
+measurement runs through `wire_encode`, the module the transport builds its body
 with, so the figures price the request rather than the stored records and nothing the
 provider never receives is billed to the window. Only the
 root loop emits it: a subagent measures its own session, which is not the one anybody is
@@ -123,7 +144,7 @@ error rather than a convention.
 
 `notice` is the loop telling the operator something without derailing the turn:
 `prompt_injection`, `degraded`, `truncated_history`, `provider_fallback`,
-`approval_denied`, `agent_fallback`.
+`approval_denied`, `agent_fallback`, `tools_disabled`.
 
 The hub retains what it emits in two structures, because a reconnect and a reload ask
 different questions. The **replay ring** is bounded by a frame count and answers "what did
@@ -136,7 +157,7 @@ rather than its frame count, and it is bounded in bytes. See
 
 ### History windowing
 
-`historyForLLM` runs four ordered steps: keep the last `maxMessages` (default 500), start
+`history_for_llm` runs four ordered steps: keep the last `maxMessages` (default 500), start
 at the first `user` message, align to a legal tool-call boundary, then truncate tool
 results (default 8,000 characters, head and tail with the middle marked).
 
@@ -162,13 +183,13 @@ the part that decides when the model reaches for it.
   the way a fork is. That session is excluded from the sidebar and deleted with its
   parent — and is what lets a reloaded transcript fetch the run back.
 - **Depth is capped at 3, and cycles are refused** — both as a tool _result_ rather than
-  a throw, so the model can adapt instead of the turn dying.
+  an error, so the model can adapt instead of the turn dying.
 - **Nesting forwards rather than recurses.** A grandchild's event is passed through with
   only its `turnId` rewritten, which keeps the wire schema non-recursive.
 - **An approval inside a subagent bubbles to the operator** scoped to the session
   they are looking at, not to the delegation.
-- **The timeout is the caller's** `subagentTimeoutMs`, composed with `AbortSignal.any`.
-  It kills the child, not the parent turn.
+- **The timeout is the caller's** `subagentTimeoutMs`, composed as a `child_token()` of
+  the caller's. It kills the child, not the parent turn.
 
 ## What is on disk
 
@@ -189,9 +210,15 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`. Directories are created `0700
 
 ### The database
 
-`node:sqlite`, built into Node 22 — no prebuilds, no compiler on the install path. One
-`DatabaseSync` connection is shared by every store so all writes land in one WAL. Every
-table is `STRICT`.
+SQLite, compiled into the binary through `rusqlite`'s bundled amalgamation — no
+prebuilds, no shared library to find, no compiler on the install path. That argument used
+to come with an asterisk: `node:sqlite` was unflagged only in Node 22.13, so the
+no-prebuilds claim was bought with a Node floor an operator had to meet. A single
+executable has no floor at all, so what is left is the claim without the asterisk.
+
+One `Connection` is shared by every store, behind a re-entrant lock, so all writes land in
+one WAL and a store method that opens a transaction and then calls another store's method
+cannot deadlock on itself. Every table is `STRICT`.
 
 | Table                                            | Holds                                                             |
 | ------------------------------------------------ | ----------------------------------------------------------------- |

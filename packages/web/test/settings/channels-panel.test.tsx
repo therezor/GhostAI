@@ -96,8 +96,6 @@ async function save(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(await screen.findByRole('button', { name: 'Save changes' }));
 }
 
-// ---------------------------------------------------------------------------
-
 describe('the channels panel', () => {
   it('shows what the settings already hold', async () => {
     mount(settings({ allowlist: ['4471|me'], admins: ['4471'] }));

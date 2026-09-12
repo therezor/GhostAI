@@ -123,9 +123,9 @@ const UNTITLED = 'sessions.untitled';
 /**
  * How many conversations the column carries.
  *
- * It used to be whatever the server's default page was — fifty — which was not a
- * decision so much as the absence of one, and it read as the whole list while
- * being the newest fraction of it. Thirty is a number this column can *mean*:
+ * Not the server's default page — fifty is the absence of a decision rather
+ * than one, and it reads as the whole list while being the newest fraction of
+ * it. Thirty is a number this column can *mean*:
  * enough that the conversation you were in yesterday is still here, few enough
  * that the See all link below is visibly the way to the rest rather than a
  * footnote. Everything past it lives on `/sessions`, which searches and pages.
@@ -175,11 +175,11 @@ export function Sidebar({
     void navigate({ to: '/', search: { session: key } });
   }
 
-  // Every conversation, whatever workspace it is in. It used to be scoped to a
-  // switcher in this column, which meant a session moved out of the workspace
-  // you were browsing simply vanished from the list — and the only way to find
-  // it again was to guess which workspace it had gone to. A workspace is where
-  // a conversation's *files* are, not a folder conversations are filed under.
+  // Every conversation, whatever workspace it is in. Scoping the column to a
+  // switcher would make a session moved out of the workspace you are browsing
+  // simply vanish, leaving no way to find it but guessing where it went. A
+  // workspace is where a conversation's *files* are, not a folder conversations
+  // are filed under.
   //
   // Every conversation, but not every *session*. A delegated run gets a session
   // of its own, and it is not a conversation anybody had — it is a step inside
@@ -221,14 +221,13 @@ export function Sidebar({
    * Guarded on `isSuccess`, or the row lights up for one render on every load
    * while the list is still in flight.
    *
-   * **"Unsaved" is not "absent from these rows".** It used to be read that way,
-   * and the two coincided for as long as the column was every session. They
-   * stopped coinciding when it began excluding an origin: a delegated run is
-   * opened from `/sessions` and can *never* appear here, so the old test lit
-   * this row over a real transcript and announced it as the current page. The
-   * same was true, more quietly, of any conversation older than the thirty.
+   * **"Unsaved" is not "absent from these rows".** The two coincide only while
+   * the column is every session, and it is not: a delegated run is opened from
+   * `/sessions` and can *never* appear here, so reading absence as unsaved lights
+   * this row over a real transcript and announces it as the current page — and
+   * does the same, more quietly, for any conversation older than the thirty.
    *
-   * So the key this column minted is what it asks about. The row still lights on
+   * So the key this column minted is what it asks about. The row lights on
    * the press — `startedKey` is set before the navigation — and stops the moment
    * the first message lands and the real row arrives, which is unchanged. The
    * `attached === undefined` arm stays: arriving at `/` cold is a new session

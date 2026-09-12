@@ -2,10 +2,18 @@
 
 REST and WebSocket on the same port as the UI. Default `http://127.0.0.1:3000`.
 
-Every schema in this document is a Zod object in `@ghostwire/protocol`, and the **OpenAPI
-3.1 document is generated from those same objects** — served at `/api/openapi.json`. A
-test reflects over the schema modules and fails if an exported schema was not registered,
-so the API description cannot drift from what the server validates against.
+Every schema in this document exists twice: as a Zod object in `@ghostwire/protocol`,
+which is what the browser parses, and as the Rust type the server validates against. The
+**OpenAPI 3.1 document is generated from the server's own route manifest and those Rust
+types** — served at `/api/openapi.json` — rather than written by hand, because a document
+with a source of its own is how a generated document starts lying.
+
+Two gates keep the three honest. A test reflects over the Zod schema modules and fails if
+an exported schema was not registered, so nothing can be added to the wire without
+appearing in the description. And a per-schema drift test generates the Rust side of each
+name and compares it against what the Zod side dumped, after normalising away the
+spellings the two generators differ on for no reason — so a field, a bound, a default or
+a variant that one side has and the other does not fails CI.
 
 ## Authentication
 
@@ -51,7 +59,7 @@ Listing endpoints use cursor pagination, never offset.
 | POST   | `/api/setup/claim`    | `public`   | Takes the one-time console code.                      |
 | POST   | `/api/setup/password` | `required` | The wizard's first password and every later rotation. |
 
-Passwords are at least 12 characters. The username defaults to `ghostai`, is lower-cased by
+Passwords are at least 12 characters. The username defaults to `ghost`, is lower-cased by
 the schema, and changing either revokes every other session.
 
 ### Settings
@@ -85,12 +93,22 @@ the schema, and changing either revokes every other session.
 
 ### Agents, tools, toolboxes
 
-| Method | Path             | Auth       | Notes                                                                       |
-| ------ | ---------------- | ---------- | --------------------------------------------------------------------------- |
-| GET    | `/api/agents`    | `required` | **Read-only.** Agents are created and edited through `PATCH /api/settings`. |
-| GET    | `/api/tools`     | `required` | What is registered, with source and risk band.                              |
-| GET    | `/api/toolboxes` | `required` | Installed manifests and their approval state.                               |
-| GET    | `/api/mcp`       | `required` | Each configured MCP server's live state. See below.                         |
+| Method | Path                          | Auth       | Notes                                                                       |
+| ------ | ----------------------------- | ---------- | --------------------------------------------------------------------------- |
+| GET    | `/api/agents`                 | `required` | **Read-only.** Agents are created and edited through `PATCH /api/settings`. |
+| GET    | `/api/tools`                  | `required` | What is registered, with source and risk band.                              |
+| GET    | `/api/toolboxes`              | `required` | Installed manifests and their approval state.                               |
+| GET    | `/api/mcp`                    | `required` | Each configured MCP server's live state. See below.                         |
+| GET    | `/api/extensions`             | `required` | Every discovered extension, its state and its warnings.                     |
+| POST   | `/api/extensions/:id/approve` | `required` | Records the digest of the files on disk **now**.                            |
+| POST   | `/api/extensions/:id/revoke`  | `required` | Drops the approval. The files stay installed.                               |
+| GET    | `/api/commands`               | `required` | The slash commands extensions contribute.                                   |
+| POST   | `/api/commands/:id`           | `required` | Runs one. Answers with text, not a resource key.                            |
+
+**The two extension writes are `POST`, not a settings patch, and not idempotent.** An
+approval records the digest of the bytes on disk at that moment; putting it in
+`config.json` would make it survive an edit to the very files it was about. Nothing about
+either is safe to replay across such an edit, which is what rules out `PUT`.
 
 `GET /api/mcp` is read-only, like `/api/toolboxes`: a server is created, edited and
 deleted through `PATCH /api/settings`, because it is configuration. What this route
@@ -149,7 +167,7 @@ refreshes the run list. It is also the one route where a single HTTP call starts
 unbounded agent turn, so it carries its own rate limit.
 
 A cron expression the scheduler cannot honour is a **422 naming the field**, not a 500:
-`parseCron` throws a `config` error, whose default mapping is a 500 because a config error
+`parse_cron` answers with a `config` error, whose default mapping is a 500 because a config error
 normally means the install is broken. Here it means the operator typed something.
 
 The route table is a manifest that the router registers _from_ and the auth-matrix test
@@ -163,23 +181,22 @@ with no handler is a type error.
 `GET /ws`, authenticated. A plain GET without an upgrade answers `426`. Optional query
 parameters `?session=` and `?agent=`.
 
-`PROTOCOL_VERSION` is `1`, sent in the `connected` frame.
+`PROTOCOL_VERSION` is `2`, sent in the `connected` frame.
 
 ### Client → server
 
-| Type               | Does                                                     |
-| ------------------ | -------------------------------------------------------- |
-| `ping`             | Answered with `pong`.                                    |
-| `user.message`     | Starts a turn. Content may be text or parts, for images. |
-| `turn.steer`       | Injects guidance into a running turn.                    |
-| `turn.stop`        | Aborts.                                                  |
-| `turn.regenerate`  | Drops the last answer and re-runs.                       |
-| `user.edit`        | Rewrites a user message and re-runs from it.             |
-| `session.new`      | Starts a session.                                        |
-| `session.switch`   | Rebinds this socket.                                     |
-| `session.resume`   | `{ lastSeq }` — replays what was missed.                 |
-| `tool.approve`     | Answers an approval prompt, with a scope.                |
-| `audio.transcribe` | Sends audio for transcription.                           |
+| Type              | Does                                                     |
+| ----------------- | -------------------------------------------------------- |
+| `ping`            | Answered with `pong`.                                    |
+| `user.message`    | Starts a turn. Content may be text or parts, for images. |
+| `turn.steer`      | Injects guidance into a running turn.                    |
+| `turn.stop`       | Aborts.                                                  |
+| `turn.regenerate` | Drops the last answer and re-runs.                       |
+| `user.edit`       | Rewrites a user message and re-runs from it.             |
+| `session.new`     | Starts a session.                                        |
+| `session.switch`  | Rebinds this socket.                                     |
+| `session.resume`  | `{ lastSeq }` — replays what was missed.                 |
+| `tool.approve`    | Answers an approval prompt, with a scope.                |
 
 ### Server → client
 
@@ -189,7 +206,7 @@ Turn events: `turn.start` · `assistant.delta` · `reasoning.delta` · `tool.cal
 
 Session and connection: `connected` · `pong` · `error` · `message.ack` ·
 `message.queued` · `context.usage` · `session.status` · `session.reset` ·
-`session.replay` · `session.truncated` · `notification` · `transcribe.result` ·
+`session.replay` · `session.truncated` · `notification` ·
 `tools.changed` · `steer`
 
 `context.usage` is filed here rather than with the turn events on purpose. It is emitted

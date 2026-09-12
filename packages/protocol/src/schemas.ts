@@ -7,8 +7,8 @@
  *     "every schema converts" guarantee cannot quietly stop covering a schema
  *     someone added later — a new export with no registry entry fails the
  *     completeness assertion below it.
- *  2. `@ghostwire/server` feeds it to `@fastify/swagger` as the `$defs` pool for
- *     the generated OpenAPI 3.1 document.
+ *  2. `scripts/emit-schemas.ts` iterates it to write `schema/<Name>.json`, the
+ *     browser's half of the drift gate against `ghostai-protocol`.
  */
 
 import type { z } from 'zod';
@@ -91,6 +91,9 @@ export const PROTOCOL_SCHEMAS = {
 
   // extension
   ExtensionContribution: extension.ExtensionContributionSchema,
+  ExtensionSchemaVersion: extension.ExtensionSchemaVersionSchema,
+  ExtensionMaxTokensParam: extension.ExtensionMaxTokensParamSchema,
+  ExtensionProviderSpec: extension.ExtensionProviderSpecSchema,
   ExtensionManifest: extension.ExtensionManifestSchema,
 
   // preset

@@ -3,20 +3,18 @@
  *
  * **There is no permission control here, deliberately.** Permission is per tool
  * and per agent — `agents.list.<id>.tools` — so it is edited in the agent
- * editor, beside the agent it governs. A global policy screen used to sit here,
- * a four-row matrix of risk band to `allow`/`ask`/`deny`, and it could not
- * answer the question anyone actually had: `exec: ask` says nothing about which
- * tools it governs, and an agent's own tool list could admit a tool the matrix
- * then refused.
+ * editor, beside the agent it governs. A global four-row matrix of risk band to
+ * `allow`/`ask`/`deny` could not answer the question anyone actually has:
+ * `exec: ask` says nothing about which tools it governs, and an agent's own
+ * tool list could admit a tool the matrix then refused.
  *
  * What is left is the settings that are genuinely install-wide: how long a
  * prompt stays open, what `exec` may do when some agent is allowed to call it,
  * and how much output a result may carry.
  *
- * **There is no inventory of registered tools here either.** It used to list
- * every tool with its risk badge, back when this screen decided what happened
- * to them — a list you could read but not act on. The list that matters is the
- * one in the agent editor, where every row has a control on it.
+ * **There is no inventory of registered tools here either.** Every tool with
+ * its risk badge would be a list you could read but not act on. The list that
+ * matters is the one in the agent editor, where every row has a control on it.
  */
 
 import { useState, type JSX } from 'react';

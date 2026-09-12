@@ -1,12 +1,13 @@
 # Security
 
 Everything that decides whether an agent may touch a path, reach a host, spawn a process,
-run in a container or read a credential is in `packages/security` and nowhere else.
-Reviewing the security surface means reading one package — that is why it is a package.
+run in a container or read a credential is in `crates/security` and nowhere else.
+Reviewing the security surface means reading one crate — that is why it is a crate.
 
 It carries the strictest coverage bar in the repo, 95% lines **and** branches, because an
 untested branch in a guard is a bypass rather than a bug. The layer graph helps: `core`
-may not use the network or `child_process` at all.
+sits underneath this crate, declares no HTTP client and spawns nothing, so the crate
+everything else is built on is not where any of this could quietly be reimplemented.
 
 ## Threat model
 
@@ -65,9 +66,9 @@ An agent that must be genuinely confined gets a [toolbox](toolboxes.md).
 
 **Stops:** command injection.
 
-`guardExec` takes `argv: string[]` and produces a plan for `execFile` with
-`shell: false`. **There is no shell, ever** — a lint rule fails the build on
-`shell: true`.
+`guard_exec` takes an `argv` vector and produces a validated plan for
+`Command::new(argv[0])`. **There is no shell, ever** — not a default that something
+could switch off, but no shell anywhere in the path a command takes.
 
 There is deliberately **no deny-list of shell metacharacters**. With no shell there is no
 string for `$(...)`, backticks or `| sh` to be interpreted in, so scanning for them blocks
@@ -102,9 +103,10 @@ The usual shape — resolve the hostname, check the address, then hand the _URL_
 client — is advisory only, because the client resolves again when it connects and nothing
 makes the two answers agree.
 
-Here, validation resolves the host itself and **pins the resulting addresses into the
-dispatcher**, using a lookup that never consults DNS. There is no second resolution to
-differ from the first.
+Here, validation resolves the host itself and **pins the resulting addresses into a
+client built for that one request**, whose resolver is handed the answer and never
+consults DNS. There is no second resolution to differ from the first. A proxy configured
+in the environment is ignored for the same reason — it would connect wherever it liked.
 
 - **Every redirect hop is re-validated** with a fresh pin.
 - **`Authorization` and `Cookie` are dropped on origin change.**
@@ -158,10 +160,10 @@ changes are cached for the life of the session rather than re-read every iterati
 
 It is an ordinary editable template, `toolPolicyPrompt`, like the other seven. Editing it
 does not weaken the mechanism: the envelopes are emitted by the runtime whatever the
-template says, and the nonce is `randomBytes` that reads no template. What a deleted
-policy costs is the model's _reason_ to treat what is inside an envelope as data — so it
-gets a warning in the editor and a `tool_policy_missing_nonce` config warning, not a
-refusal. See [Prompts](prompts.md#what-you-can-edit-and-what-that-does-not-change).
+template says, and the nonce comes from the injected `RandomSource`, which reads no
+template. What a deleted policy costs is the model's _reason_ to treat what is inside an
+envelope as data — so it gets a warning in the editor and a `tool_policy_missing_nonce`
+config warning, not a refusal. See [Prompts](prompts.md#what-you-can-edit-and-what-that-does-not-change).
 
 **Detection is deliberately non-destructive.** When injection-shaped text is spotted, a
 `prompt_injection` notice raises a badge in the UI and **the content passes through
@@ -210,8 +212,8 @@ Full detail in [Toolboxes](toolboxes.md).
 
 ## Extension authorisation
 
-**Stops:** code an operator never reviewed loading itself into the agent's
-process. **Does not stop:** anything that code does once it is running.
+**Stops:** code an operator never reviewed running beside the agent.
+**Does not stop:** anything that code does once it is running.
 
 An extension is authorised by **content digest, not signature**, exactly as a
 toolbox is — the question is "are these the exact bytes approved?", not "who
@@ -226,21 +228,52 @@ Editing any file, adding one, removing one or renaming one moves the digest and
 revokes the approval, and the next reconcile refuses with a sentence naming the
 drift. Nobody has to remember to re-approve.
 
-**The limit is stated rather than papered over.** An extension that passes runs
-in the server process with full `node:` access: it can read the vault file, spawn
-a process and open a socket, and nothing in this repository stops it. That is the
-same trust level as a toolbox with host `exec`, and it is why approving one asks
-a question in the UI rather than being a toggle.
+**There is a process boundary, and it buys less than it sounds like it does.**
+An extension is a child process talking to the host over a pipe, so nothing the
+host holds is reachable from it: no registry handle, no vault object, no
+database connection, no workspace jail. The only thing it may ask the host for
+is its own secret, and the call that does it takes no arguments, so there is no
+shape of it that reads another extension's credential.
+
+**The limit is stated rather than papered over.** That process still runs under
+the operator's account, with the operator's filesystem and the operator's
+network. It can open `~/.ghostai/vault.json` itself, spawn a program and open a
+socket, and nothing in this repository stops it. **The trust class is unchanged
+from the in-process design** — what the boundary narrows is the reach of a
+mistake, not the reach of an attack. That is the same trust level as a toolbox
+with host `exec`, and it is why approving one asks a question in the UI rather
+than being a toggle.
 
 The manifest's `contributes` list is **disclosure, not enforcement**. The host
 drops a registration whose kind is not declared, which keeps the approval screen
 honest and turns an honest mistake into a visible one — but the code is already
 running by then, so it is not a boundary and this page does not call it one.
 
-Two smaller rules fall out of the same reasoning. `entry` is resolved through
-`realpath` and refused if it lands outside the extension's own directory, since
-an entry the digest does not cover is code that was never reviewed. And an
-extension's runtime state is written to a _sibling_ directory
+Three smaller rules fall out of the same reasoning.
+
+- **`command[0]` is checked before anything is spawned.** A shell binary is
+  refused outright — a shell turns the rest of the argv back into a string
+  somebody can inject into — and a program path is resolved through `realpath`
+  and refused if it lands outside the extension's own directory, since code the
+  digest does not cover is code that was never reviewed. A _bare_ name (`node`,
+  `python3`) is the deliberate exception: the operating system resolves it on
+  the host `PATH`, so it names a program the operator installed rather than one
+  the extension shipped, and the digest has nothing to say about it.
+- **The environment allow-list passes variable _names_, never values.** A child
+  gets `PATH`, `HOME`, `LANG` and `TMPDIR` plus whatever names its manifest
+  asked for, built from nothing rather than inherited. A host serving models has
+  provider API keys in its own environment, and handing that wholesale to
+  third-party code would give away every credential on the box to anything an
+  operator approved once. A manifest can ask for `NODE_EXTRA_CA_CERTS`; it
+  cannot invent a value for it.
+- **Stopping one is stdin, then `SIGTERM`, then `SIGKILL`**, each with the same
+  grace, and every signal goes to the process **group** rather than the process.
+  A child that forked a worker would otherwise leave the worker behind holding
+  the pipe, looking from out here exactly like a child that hung. The group is
+  created at spawn time, so a signal meant for an extension can never reach the
+  host.
+
+An extension's runtime state is written to a _sibling_ directory
 (`~/.ghostai/extension-data/<id>`), never inside the install, because the first
 write would otherwise revoke its own approval.
 

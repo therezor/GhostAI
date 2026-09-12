@@ -12,7 +12,7 @@
  *
  * What is no longer asserted anywhere is inheritance *on the screen*. The
  * config format still allows an absent field to fall through to
- * `agents.list.default`, and `@ghostwire/runtime` has the cases for it — but the
+ * `agents.list.default`, and `ghostai-runtime` has the cases for it — but the
  * editor fills every box from the defaults and writes them down, so the
  * assertions here are that an agent shows its own settings rather than a blank
  * where somebody else's would have been used.
@@ -127,7 +127,7 @@ const patchesOf = (calls: readonly RecordedRequest[]): ConfigPatch[] =>
  * fails for a reason the product does not have.
  *
  * Shallow over `agents.list` is all these cases need; the real merge is
- * `@ghostwire/runtime`'s to prove, and `merge.test.ts` does.
+ * `ghostai-runtime`'s to prove, and `crates/runtime/tests/merge.rs` does.
  */
 function statefulSettings(base = CONFIG): Record<string, StubRoute> {
   let current = base;

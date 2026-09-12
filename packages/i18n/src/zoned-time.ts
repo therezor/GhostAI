@@ -9,12 +9,11 @@
  * the field would then mean one thing while the row it renders back means
  * another.
  *
- * **This duplicates `instantOfLocal` in `@ghostwire/core`'s `cron.ts`, on
- * purpose.** That package reaches `node:sqlite` through its own imports, and
- * `packages/web`'s `self-contained.test.ts` exists to keep it out of the browser
- * bundle — so the browser cannot call the original however much it would like
- * to. The two are kept honest by having the same DST cases in both test files
- * rather than by sharing code across a boundary that does not permit it.
+ * **This duplicates `instant_of_local` in `ghostai-core`'s `cron.rs`, on
+ * purpose.** The original is Rust and the browser cannot call it, however much
+ * it would like to. The two are kept honest by having the same DST cases in
+ * both test suites rather than by sharing code across a boundary that does not
+ * permit it.
  *
  * The DST rules are the same, and they are the reason this is not four lines:
  *

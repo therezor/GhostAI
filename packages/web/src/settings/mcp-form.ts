@@ -88,7 +88,7 @@ export const EMPTY_MCP_FORM: McpForm = {
  * `type` is optional in the schema — it is inferred from `command` versus `url`
  * — so the form has to run the same inference the client does, or opening an
  * entry that left it out would show the wrong half of the form. This mirrors
- * `resolveSpec` in `@ghostwire/mcp`, which is where the rule is enforced.
+ * `resolve_spec` in `ghostai-mcp`, which is where the rule is enforced.
  */
 export function transportOf(config: McpServerConfig | undefined): McpTransport {
   if (config?.type !== undefined) return config.type;
@@ -130,7 +130,7 @@ function toEnabledTools(form: McpForm): string[] {
  * The fields of an entry, whatever transport it is on.
  *
  * The half that does not apply is sent **empty** rather than omitted, and that
- * is what makes the transport switchable: `resolveSpec` refuses an entry that
+ * is what makes the transport switchable: `resolve_spec` refuses an entry that
  * names both a command and a url, so moving a server to a URL has to clear the
  * command it used to have. An omitted field would leave the old one in place
  * and produce a config that refuses itself.

@@ -608,7 +608,18 @@ test.describe('no theme is second-class', () => {
             background = over(layer, background);
           }
 
-          const text = over(toRgb(style.color), background);
+          // Text this element does not paint. A syntax-highlighted box sets its
+          // textarea's colour to `transparent` once the coloured layer behind
+          // it is current: the caret stays, the glyphs come from the layer, and
+          // that layer's own spans are measured here in their own right.
+          // Compositing a zero-alpha colour over its backdrop gives 1:1, which
+          // reported every prompt box on the agent editor as invisible text —
+          // but only when the colouring had landed before the sweep looked,
+          // which is what made it a flake rather than a failure.
+          const ownColour = toRgb(style.color);
+          if (ownColour[3] === 0) continue;
+
+          const text = over(ownColour, background);
           if (ratio(text, background) < 3) {
             found.push(
               `${element.tagName.toLowerCase()}: "${own.slice(0, 40)}"`,

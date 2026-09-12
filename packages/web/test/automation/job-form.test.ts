@@ -222,9 +222,9 @@ describe('toJobRequest', () => {
   });
 
   it('leaves anything past the field count to the server', () => {
-    // The shape check is deliberately shallow: importing the real parser would
-    // drag `node:sqlite` into the browser bundle. `99 * * * *` is five fields
-    // and nonsense, and the server's 422 is what says so.
+    // The shape check is deliberately shallow: the real parser is Rust and the
+    // browser cannot call it. `99 * * * *` is five fields and nonsense, and the
+    // server's 422 is what says so.
     expect(
       toJobRequest(
         form({ name: 'x', cronExpr: '99 * * * *', message: 'go' }),

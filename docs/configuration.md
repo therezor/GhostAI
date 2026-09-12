@@ -92,9 +92,9 @@ and the agent opens the one it needs; see [Skills](skills.md). `pinnedSkills` an
 below — a `config.json` still carrying them parses, and loses them the next time it is
 written.
 
-`AgentEntrySchema` is a plain zod object, so it strips what it
-do not know: a `config.json` carrying a key this table does not list parses without error
-and loses it on the next write. There is no migration and no error, which is the whole of
+An agent entry carries no catch-all field, so it drops what it does
+not know: a `config.json` carrying a key this table does not list parses without error and
+loses it on the next write. There is no migration and no error, which is the whole of
 the upgrade path — a declared key nothing reads is worse than a missing one, because it
 reads as a setting that does nothing and the file gives no way to find that out.
 
@@ -154,8 +154,9 @@ counts as empty there, because an identity-less agent is never what was meant.
 Keyed by advertised tool name, so it reaches built-ins, toolbox programs, MCP and extension
 tools and `ask_<id>` subagent tools alike — and for a subagent it wins over
 `subagents[].prompt`, being the more specific of the two. **Types, `required` and `enum`
-are not here**: they stay generated from the tool's own Zod object, which is also what
-validates a call, so the advertised schema cannot drift from what the tool will accept.
+are not here**: they stay generated from the tool's own argument type, which is also what
+a call is deserialised into, so the advertised schema cannot drift from what the tool will
+accept.
 
 A new agent is seeded with:
 
@@ -302,7 +303,7 @@ Install-wide tool settings. **Which tools an agent may call is not here** — th
 | `maxOutputBytes`  | int > 0  | `1048576`                     | Enforced while the child writes, not after it exits.                                                                                                                                                   |
 
 There are no patterns here for `$(...)`, backticks or `| sh`. The exec tool takes
-`argv: string[]` and calls `execFile` with `shell: false`, so there is no string for a
+an `argv` vector and spawns `argv[0]` directly, so there is no string for a
 shell metacharacter to live in — scanning for them would reject legitimate commands while
 blocking nothing.
 
@@ -329,16 +330,26 @@ reaching the deprecated transport takes an explicit `"type": "sse"`. An entry
 that names neither is refused too, as a row on the MCP servers panel rather than
 a settings save the operator loses.
 
+**An explicit `"type": "sse"` is dialled as Streamable HTTP anyway**, and the
+server's status row says so. The MCP client this build uses ships no SSE client
+transport at all, and Streamable HTTP serves the same URL shape, so the
+alternative to dialling it that way is refusing the entry outright. What an
+operator should do about it depends on the server: if it speaks Streamable HTTP,
+delete the `"type"` — the warning goes away and nothing else changes. If it
+speaks only the legacy transport, it cannot be reached from here, and the
+connection error says that in as many words rather than leaving the cause to be
+guessed at from a timeout.
+
 **`env` and `headers` replace rather than merge**, like `providers.<id>.extraHeaders`:
 they are edited as one block of text, and merging key by key would leave no way
 to remove an entry. `null` at `tools.mcpServers.<id>` deletes the server, and
 `null` at its `oauth` says it does not use OAuth.
 
 Two guards do **not** apply here, and the reasoning is in the module headers of
-`@ghostwire/mcp`. A stdio `command` does not go through `guardExec`: that guard
+`crates/mcp`. A stdio `command` does not go through `guard_exec`: that guard
 constrains argv a _model_ wrote inside the workspace jail, and it refuses the
 absolute paths and `npx`-shaped invocations every MCP server uses. A `url` does
-not go through `guardedFetch`'s SSRF blocklist, because the commonest MCP
+not go through the guarded fetch's SSRF blocklist, because the commonest MCP
 endpoint by far is `http://127.0.0.1:…`, which is exactly what that blocklist
 exists to refuse. Both are operator configuration, in the same trust class as
 `providers.<id>.apiBase`. What _is_ enforced: the child gets `env` plus a

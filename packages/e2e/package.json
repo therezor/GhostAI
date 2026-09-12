@@ -14,13 +14,7 @@
     "baseline": "tsx src/fidelity/capture.ts"
   },
   "dependencies": {
-    "@ghostwire/agent": "workspace:*",
-    "@ghostwire/core": "workspace:*",
     "@ghostwire/protocol": "workspace:*",
-    "@ghostwire/providers": "workspace:*",
-    "@ghostwire/runtime": "workspace:*",
-    "@ghostwire/server": "workspace:*",
-    "@ghostwire/tools": "workspace:*",
     "@ghostwire/web": "workspace:*"
   },
   "devDependencies": {

@@ -95,19 +95,20 @@ absent entry in an agent's map already means "not enabled", and an existing agen
 no capability until someone says so. See [Configuration](configuration.md#toolsmcpserversid)
 for the settings and the two security decisions behind them.
 
-Four things about the bridge are worth knowing before reading `@ghostwire/mcp`:
+Four things about the bridge are worth knowing before reading `crates/mcp`:
 
 - **The name is qualified and generated.** `mcp_<server>_<tool>`, sanitised into the
   `[A-Za-z0-9_-]{1,64}` every provider accepts, with a digest suffix when it would not
   fit. Two servers can both advertise `search`; one shared registry cannot hold two of
-  them, and `ToolRegistry.register` treats a duplicate as a `conflict` rather than
+  them, and `ToolRegistry::register` treats a duplicate as a `conflict` rather than
   letting load order decide which one a call reaches.
 - **The schema is passed through, not converted.** Every other tool derives its JSON
-  Schema from a Zod object; an MCP server supplies the JSON Schema directly, so
-  `bridgeTool` implements `Tool` against it. Round-tripping through Zod would advertise a
-  shape the server did not describe — every converter is lossy on `$ref`, `oneOf` and
-  `format` — and the call would then fail _at the server_, which reads as the model being
-  broken. What the bridge validates is the contract `toolConformance` states and no more:
+  Schema from its own argument type; an MCP server supplies the JSON Schema directly, so
+  `bridge_tool` implements `Tool` against it. Round-tripping it through a Rust type would
+  advertise a shape the server did not describe — every converter is lossy on `$ref`,
+  `oneOf` and `format` — and the call would then fail _at the server_, which reads as the
+  model being broken. What the bridge validates is the contract `tool_conformance` states
+  and no more:
   an object, no unknown keys, required keys present, declared types honoured, and `"10"`
   accepted where a number is wanted. Anything deeper is the server's own business.
 - **A band is `safe` only if the server said so.** `readOnlyHint: true` earns `safe` and
@@ -124,14 +125,15 @@ built only from the live registry would silently drop the operator's opinion.
 
 ### Defining one
 
-One Zod object is the only copy of a tool's shape. JSON Schema for the model is generated
-from it, arguments are validated against it, and the handler's argument type is inferred
-from it — a hand-written type could drift from the schema, and the drift would show up as
-a model call that validates and then crashes.
+One argument type is the only copy of a tool's shape. `schemars` derives the JSON Schema
+the model is shown from it, `jsonschema` validates every call against that same schema,
+and serde then turns the value into the struct the handler takes — a hand-written schema
+could drift from the type, and the drift would show up as a model call that validates and
+then crashes.
 
 Numbers coerce, because models emit `"10"` as often as `10`.
 
-`ToolRegistry.execute` **never throws**. A failure comes back as a result carrying
+`ToolRegistry::execute` **never fails the turn**. A failure comes back as a result carrying
 `isError` and an error kind, because a throw at that point would take down the turn rather
 than letting the model read what went wrong and try something else. `definitions()` is
 memoised and sorted by name, so the prompt prefix a provider caches does not shuffle
@@ -140,14 +142,15 @@ between requests.
 Every registration carries a source — `builtin`, `mcp` or `extension` — so uninstalling
 an extension can remove exactly its tools, with no module-cache surgery and no restart.
 The source is the _coarse_ grain, though, and neither MCP nor extensions use it for a
-single owner going away: `unregisterBySource('extension')` would take every other
+single owner going away: `unregister_by_source(ToolSource::Extension)` would take every other
 extension's tools with it, so the names each owner last contributed are remembered and
 removed by name. That is `ToolSink`, and one implementation serves both.
 
 ## Extension tools
 
-An extension registers a tool the same way a built-in is defined — `defineTool`, one Zod
-object — and the host rewrites the name to `ext_<extension>_<tool>` on the way in, with
+An extension's tools arrive through the MCP bridge rather than being defined in
+process — descriptors from `tools/list`, bridged against the schema they carry — and the
+host rewrites the name to `ext_<extension>_<tool>` on the way in, with
 the same 64-character cap and digest tail `mcp_<server>_<tool>` gets. What arrives in the
 registry is an ordinary `Tool` and nothing downstream can tell the difference.
 
@@ -174,8 +177,8 @@ operator could read in the context inspector and not change.
 ```
 
 **Prose only, and the boundary is load-bearing.** `type`, `required`, `enum` and the rest
-of the schema stay generated from the tool's Zod object — which is also what `parseArgs`
-validates against. Letting an operator supply a schema would let the advertised shape
+of the schema stay generated from the tool's argument type — which is also what
+`parse_args` validates a call against. Letting an operator supply a schema would let the advertised shape
 drift from the accepted one, and the failure mode is a model dutifully passing a field
 that then fails validation on every call: an agent that looks broken for a reason nothing
 reports. For the same reason a `fields` name the schema does not have is dropped and
@@ -192,7 +195,7 @@ is good enough. A box that said "the built-in description" instead cost them a t
 this page to find out what it was. The row then shows whichever description the model
 actually receives, so the list cannot disagree with the payload.
 
-The rewrite happens in `AgentLoop.toolDefinitions`, after the subagent definitions are
+The rewrite happens in `AgentLoop::tool_definitions`, after the subagent definitions are
 appended — one pass covering built-ins, toolbox programs, MCP and extension tools and
 `ask_<id>` alike, and the reason `toolPrompts` beats `subagents[].prompt`. It cannot
 happen in the registry: `definitions()` is memoised and shared by every agent in the
@@ -225,9 +228,9 @@ Note this is the opposite convention to `tools.exec.allowedBinaries`, where empt
 "anything not denied". That is deliberate: an allow-list of _binaries_ narrows a tool the
 operator already turned on, while this is the list of tools themselves.
 
-A new agent is not born empty either — it is seeded with the file tools on `allow` and
-`exec` on `ask`, because an agent that can do nothing looks broken to whoever just made
-it. That seeding is the only place a risk band becomes a permission, and it happens once,
+A new agent is not born empty either — it is seeded with the file tools, `memory` and `skill` on
+`allow` and `exec` on `ask`, because an agent that can do nothing looks broken to whoever
+just made it. That seeding is the only place a risk band becomes a permission, and it happens once,
 at creation, where it is visible and editable.
 
 ### Risk bands decide nothing
